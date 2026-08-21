@@ -1,0 +1,239 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum AssetStatus {
+  AVAILABLE
+  ASSIGNED
+  IN_USE
+  UNDER_MAINTENANCE
+  LOST
+  DISPOSED
+}
+
+enum AssetCondition {
+  NEW
+  GOOD
+  FAIR
+  POOR
+  DAMAGED
+}
+
+enum EpcStatus {
+  ACTIVE
+  INACTIVE
+  DAMAGED
+  LOST
+  RETIRED
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  RETURNED
+  CANCELLED
+}
+
+enum MovementType {
+  LOCATION_TRANSFER
+  DEPARTMENT_TRANSFER
+  FULL_TRANSFER
+}
+
+model Location {
+  id                 Int               @id @default(autoincrement())
+  locationCode       String            @unique @map("location_code")
+  name               String
+  description        String?
+  isActive           Boolean           @default(true) @map("is_active")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+  assets             Asset[]
+  assetAssignments   AssetAssignment[]
+  fromAssetMovements AssetMovement[]   @relation("AssetMovementFromLocation")
+  toAssetMovements   AssetMovement[]   @relation("AssetMovementToLocation")
+
+  @@map("locations")
+}
+
+model Department {
+  id                 Int               @id @default(autoincrement())
+  departmentCode     String            @unique @map("department_code")
+  name               String
+  description        String?
+  isActive           Boolean           @default(true) @map("is_active")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+  users              User[]
+  assets             Asset[]
+  assetAssignments   AssetAssignment[]
+  fromAssetMovements AssetMovement[]   @relation("AssetMovementFromDepartment")
+  toAssetMovements   AssetMovement[]   @relation("AssetMovementToDepartment")
+
+  @@map("departments")
+}
+
+model AssetCategory {
+  id           Int      @id @default(autoincrement())
+  categoryCode String   @unique @map("category_code")
+  name         String
+  description  String?
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  assets       Asset[]
+
+  @@map("asset_categories")
+}
+
+model Role {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users User[]
+
+  @@map("roles")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  fullName     String   @map("full_name")
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  roleId       Int      @map("role_id")
+  departmentId Int?     @map("department_id")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  role                Role              @relation(fields: [roleId], references: [id])
+  department          Department?       @relation(fields: [departmentId], references: [id])
+  assignedAsset       AssetAssignment[] @relation("AssignedToUser")
+  createdAssignments  AssetAssignment[] @relation("AssignedByUser")
+  movedAssetMovements AssetMovement[]   @relation("AssetMovementMovedBy")
+
+  @@map("users")
+}
+
+model Asset {
+  id           Int            @id @default(autoincrement())
+  assetCode    String         @unique @map("asset_code")
+  itemName     String         @map("item_name")
+  categoryId   Int            @map("category_id")
+  departmentId Int?           @map("department_id")
+  locationId   Int?           @map("location_id")
+  serialNumber String?        @unique @map("serial_number")
+  brand        String?
+  model        String?
+  purchaseDate DateTime?      @map("purchase_date") @db.Date
+  purchaseCost Decimal?       @map("purchase_cost") @db.Decimal(12, 2)
+  status       AssetStatus    @default(AVAILABLE)
+  condition    AssetCondition @default(GOOD)
+  remarks      String?
+  isActive     Boolean        @default(true) @map("is_active")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  category    AssetCategory     @relation(fields: [categoryId], references: [id])
+  department  Department?       @relation(fields: [departmentId], references: [id])
+  location    Location?         @relation(fields: [locationId], references: [id])
+  epc         AssetEpc?
+  assignments AssetAssignment[]
+  movements   AssetMovement[]
+
+  @@index([categoryId])
+  @@index([departmentId])
+  @@index([locationId])
+  @@map("assets")
+}
+
+model AssetEpc {
+  id           Int       @id @default(autoincrement())
+  epcCode      String    @unique @map("epc_code")
+  assetId      Int       @unique @map("asset_id")
+  status       EpcStatus @default(ACTIVE)
+  assignedAt   DateTime  @default(now()) @map("assigned_at")
+  unassignedAt DateTime? @map("unassigned_at")
+  remarks      String?
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@index([assetId])
+  @@map("asset_epcs")
+}
+
+model AssetAssignment {
+  id               Int              @id @default(autoincrement())
+  assignmentNo     String           @unique @map("assignment_no")
+  assetId          Int              @map("asset_id")
+  assignedToUserId Int              @map("assigned_to_user_id")
+  assignedByUserId Int              @map("assigned_by_user_id")
+  departmentId     Int?             @map("department_id")
+  locationId       Int?             @map("location_id")
+  assignedDate     DateTime         @map("assigned_date") @db.Date
+  returnDueDate    DateTime?        @map("return_due_date") @db.Date
+  returnedAt       DateTime?        @map("returned_at")
+  status           AssignmentStatus @default(ACTIVE)
+  purpose          String?
+  remarks          String?
+  isActive         Boolean          @default(true) @map("is_active")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  asset          Asset       @relation(fields: [assetId], references: [id])
+  assignedToUser User        @relation("AssignedToUser", fields: [assignedToUserId], references: [id])
+  assignedByUser User        @relation("AssignedByUser", fields: [assignedByUserId], references: [id])
+  department     Department? @relation(fields: [departmentId], references: [id])
+  location       Location?   @relation(fields: [locationId], references: [id])
+
+  @@index([assetId])
+  @@index([assignedToUserId])
+  @@index([assignedByUserId])
+  @@index([departmentId])
+  @@index([locationId])
+  @@map("asset_assignments")
+}
+
+model AssetMovement {
+  id               Int          @id @default(autoincrement())
+  movementNo       String       @unique @map("movement_no")
+  assetId          Int          @map("asset_id")
+  fromDepartmentId Int?         @map("from_department_id")
+  toDepartmentId   Int?         @map("to_department_id")
+  fromLocationId   Int?         @map("from_location_id")
+  toLocationId     Int?         @map("to_location_id")
+  movedByUserId    Int          @map("moved_by_user_id")
+  movementType     MovementType @map("movement_type")
+  movementDate     DateTime     @default(now()) @map("movement_date")
+  reason           String?
+  remarks          String?
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  asset          Asset       @relation(fields: [assetId], references: [id])
+  movedByUser    User        @relation("AssetMovementMovedBy", fields: [movedByUserId], references: [id])
+  fromDepartment Department? @relation("AssetMovementFromDepartment", fields: [fromDepartmentId], references: [id])
+  toDepartment   Department? @relation("AssetMovementToDepartment", fields: [toDepartmentId], references: [id])
+  fromLocation   Location?   @relation("AssetMovementFromLocation", fields: [fromLocationId], references: [id])
+  toLocation     Location?   @relation("AssetMovementToLocation", fields: [toLocationId], references: [id])
+
+  @@index([assetId])
+  @@index([movedByUserId])
+  @@index([fromDepartmentId])
+  @@index([toDepartmentId])
+  @@index([fromLocationId])
+  @@index([toLocationId])
+  @@map("asset_movements")
+}

@@ -1,0 +1,38 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import { LoginPage } from "./pages/LoginPages";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { DashboardPage } from "./pages/DashboardPages";
+import { LocationsPage } from "./pages/LocationPages";
+import { DepartmentsPages } from "./pages/DepartmentsPages";
+import { AssetCategoriesPages } from "./pages/AssetCategoriesPages";
+import { UsersPages } from "./pages/UsersPages";
+import { RolesPages } from "./pages/RolesPages";
+import { AssetMovementsPage } from "./pages/AssetMovementPages";
+import { RepairsPage } from "./pages/RepairPages";
+import { AssetsPages } from "./pages/AssetsPages";
+import "./App.css";
+import { Layout } from "./components/Layout";
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate to="/dashboard" replace/>} />
+      <Route path="/login" element={<LoginPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<Layout />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/locations" element={<LocationsPage />} />
+            <Route path="/departments" element={<DepartmentsPages />} />
+            <Route path="/assets" element={<AssetsPages />} />
+            <Route path="/asset-categories" element={<AssetCategoriesPages />} />
+            <Route path="/users" element={<UsersPages />} />
+            <Route path="/roles" element={<RolesPages />} />
+            <Route path="/asset-movements" element={<AssetMovementsPage />} />
+            <Route path="/repairs" element={<RepairsPage />} />
+          </Route>
+        </Route>
+    </Routes>
+  );
+}
+
+export default App;

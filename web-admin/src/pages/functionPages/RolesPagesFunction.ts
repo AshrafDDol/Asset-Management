@@ -1,0 +1,140 @@
+import type { FormEvent } from 'react';
+import { useEffect, useState } from 'react';
+import { type Role, createRoleApi, getRolesApi, updateRoleApi } from '../../api/roles.api';
+
+type RoleFormState = {
+    name: string;
+    description: string;
+    isActive: boolean;
+};
+
+const initialForm: RoleFormState = {
+    name: "",
+    description: "",
+    isActive: true,
+};
+
+function validateForm(form: RoleFormState): string | null {
+    if (!form.name.trim()) {
+        return "Name is required.";
+    }
+
+    return null;
+}
+
+function buildCreatePayload(form: RoleFormState) {
+    return {
+        name: form.name.trim() || undefined,
+        description: form.description.trim() || undefined,
+        isActive: form.isActive,
+    };
+}
+
+export function useRolesPagesFunction() {
+    const [roles, setRoles] = useState<Role[]>([]);
+    const [form, setForm] = useState<RoleFormState>(initialForm);
+
+    const [editingRoleId, setEditingRoleId] = useState<number | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState("");
+
+    const isEditing = editingRoleId !== null;
+
+    function updateForm<K extends keyof RoleFormState>(
+        key: K,
+        value: RoleFormState[K]
+    ) {
+        setForm((prevForm) => ({
+            ...prevForm,
+            [key]: value,
+        }));
+    }
+
+    async function loadRoles() {
+        try {
+            setLoading(true);
+            setError("");
+
+            const data = await getRolesApi();
+            setRoles(Array.isArray(data) ? data : []);
+        } catch (err: any) {
+            setError(
+                err?.reponse?.data?.message ||
+                    err?.message ||
+                    "Failed to load roles."
+            );
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    function handleEditRole(role: Role) {
+        setEditingRoleId(role.id);
+
+        setForm({
+            name: role.name || "",
+            description: role.description || "",
+            isActive: role.isActive !== false,
+        });
+    }
+
+    function handleCancelEdit() {
+        setEditingRoleId(null);
+        setForm(initialForm);
+        setError("");
+    }
+
+    async function handleSubmitRole(event: FormEvent) {
+        event.preventDefault();
+
+        const validationError = validateForm(form);
+
+        if (validationError) {
+            setError(validationError);
+            return;
+        }
+
+        try {
+            setSaving(true);
+            setError("");
+
+            if (isEditing && editingRoleId) {
+                await updateRoleApi(editingRoleId, buildCreatePayload(form));
+            } else {
+                await createRoleApi(buildCreatePayload(form));
+            }
+
+            setForm(initialForm);
+            setEditingRoleId(null);
+            await loadRoles();
+        } catch (err: any) {
+            setError(
+                err?.response?.data?.message ||
+                    err?.message ||
+                    "Failed to save role."
+            );
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    useEffect(() => {
+        loadRoles();
+    }, []);
+
+    return {
+        roles,
+        form,
+        isEditing,
+        loading,
+        saving,
+        error,
+        loadRoles,
+        updateForm,
+        handleEditRole,
+        handleCancelEdit,
+        handleSubmitRole,
+    };
+}
+
