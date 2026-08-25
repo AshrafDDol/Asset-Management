@@ -1,5 +1,6 @@
 export type ScreenStackParamList = {
     HomeScreen: undefined;
+    LoginScreen: undefined;
 };
 
 export type MainTabParamList = {
