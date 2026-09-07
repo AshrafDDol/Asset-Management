@@ -9,11 +9,26 @@ datasource db {
 
 enum AssetStatus {
   AVAILABLE
+  RESERVED
+  PENDING_CONFIRMATION
   ASSIGNED
   IN_USE
+  RETURN_PENDING
   UNDER_MAINTENANCE
   LOST
   DISPOSED
+}
+
+enum LocationType {
+  STORE
+  WAREHOUSE
+  RACK
+  LEVEL
+  BIN
+  FILE
+  PRODUCTION_AREA
+  MACHINE_LOCATION
+  OTHER
 }
 
 enum AssetCondition {
@@ -44,19 +59,58 @@ enum MovementType {
   FULL_TRANSFER
 }
 
+enum AssetRequestStatus {
+  PENDING
+  PROCESSING
+  ISSUED
+  COMPLETED
+  CANCELLED
+}
+
+enum RequestAllocationStatus {
+  RESERVED
+  ISSUED
+  CONFIRMED
+  RETURN_PENDING
+  RETURNED
+  CANCELLED
+}
+
+enum ConfirmationType {
+  ISSUE_CONFIRMATION
+  RETURN_CONFIRMATION
+}
+
+enum ConfirmationSource {
+  WEB_ADMIN
+  HANDHELD
+}
+
 model Location {
   id                 Int               @id @default(autoincrement())
   locationCode       String            @unique @map("location_code")
   name               String
   description        String?
+  parentLocationId   Int?              @map("parent_location_id")
+  departmentId       Int?              @map("department_id")
+  locationType       LocationType      @default(OTHER) @map("location_type")
   isActive           Boolean           @default(true) @map("is_active")
   createdAt          DateTime          @default(now()) @map("created_at")
   updatedAt          DateTime          @updatedAt @map("updated_at")
+  parentLocation     Location?         @relation("LocationHierarchy", fields: [parentLocationId], references: [id])
+  childLocations     Location[]        @relation("LocationHierarchy")
+  rootAssetRequests  AssetRequest[]    @relation("RequestRootLocation")
+  department         Department?       @relation(fields: [departmentId], references: [id])
   assets             Asset[]
-  assetAssignments   AssetAssignment[]
+  homeAssets         Asset[] @relation("AssetHomeLocation")
+  preparedRequestLines AssetRequestLine[] @relation("PreparedSpecificLocation")
+  assetAssignments   AssetAssignment[] @relation("AssignmentLocation")
+  returnAssignments  AssetAssignment[] @relation("AssignmentReturnLocation")
   fromAssetMovements AssetMovement[]   @relation("AssetMovementFromLocation")
   toAssetMovements   AssetMovement[]   @relation("AssetMovementToLocation")
 
+  @@index([parentLocationId])
+  @@index([departmentId])
   @@map("locations")
 }
 
@@ -69,7 +123,7 @@ model Department {
   createdAt          DateTime          @default(now()) @map("created_at")
   updatedAt          DateTime          @updatedAt @map("updated_at")
   users              User[]
-  assets             Asset[]
+  locations          Location[]
   assetAssignments   AssetAssignment[]
   fromAssetMovements AssetMovement[]   @relation("AssetMovementFromDepartment")
   toAssetMovements   AssetMovement[]   @relation("AssetMovementToDepartment")
@@ -78,16 +132,51 @@ model Department {
 }
 
 model AssetCategory {
-  id           Int      @id @default(autoincrement())
-  categoryCode String   @unique @map("category_code")
+  id           Int        @id @default(autoincrement())
+  categoryCode String     @unique @map("category_code")
   name         String
   description  String?
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  isActive     Boolean    @default(true) @map("is_active")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
   assets       Asset[]
+  bladeSkus    BladeSku[]
+  requestLines AssetRequestLine[]
 
   @@map("asset_categories")
+}
+
+model BladeSku {
+  id            Int      @id @default(autoincrement())
+  skuCode       String   @unique @map("sku_code")
+  name          String
+  categoryId    Int      @map("category_id")
+  bladeType     String?  @map("blade_type")
+  specification String?
+  remarks       String?
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  category     AssetCategory      @relation(fields: [categoryId], references: [id])
+  assets       Asset[]
+  requestLines AssetRequestLine[]
+
+  @@index([categoryId])
+  @@map("blade_skus")
+}
+
+model Machine {
+  id            Int            @id @default(autoincrement())
+  machineCode   String         @unique @map("machine_code")
+  machineName   String         @map("machine_name")
+  description   String?
+  isActive      Boolean        @default(true) @map("is_active")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  assetRequests AssetRequest[]
+
+  @@map("machines")
 }
 
 model Role {
@@ -104,6 +193,7 @@ model Role {
 }
 
 model User {
+  preparedRequestLines AssetRequestLine[] @relation("PreparedRecipient")
   id           Int      @id @default(autoincrement())
   username     String   @unique
   fullName     String   @map("full_name")
@@ -115,13 +205,124 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  role                Role              @relation(fields: [roleId], references: [id])
-  department          Department?       @relation(fields: [departmentId], references: [id])
-  assignedAsset       AssetAssignment[] @relation("AssignedToUser")
-  createdAssignments  AssetAssignment[] @relation("AssignedByUser")
-  movedAssetMovements AssetMovement[]   @relation("AssetMovementMovedBy")
+  role                Role                     @relation(fields: [roleId], references: [id])
+  department          Department?              @relation(fields: [departmentId], references: [id])
+  assignedAsset       AssetAssignment[]        @relation("AssignedToUser")
+  createdAssignments  AssetAssignment[]        @relation("AssignedByUser")
+  movedAssetMovements AssetMovement[]          @relation("AssetMovementMovedBy")
+  assetRequests       AssetRequest[]           @relation("AssetRequestRequestedBy")
+  reservedAllocations AssetRequestAllocation[] @relation("AllocationReservedBy")
+  returnedAssignments AssetAssignment[]        @relation("AssignmentReturnedBy")
+  scanConfirmations   AssetScanConfirmation[]  @relation("ConfirmationConfirmedBy")
 
   @@map("users")
+}
+
+model AssetRequest {
+  id                Int                @id @default(autoincrement())
+  requestNo         String             @unique @map("request_no")
+  jobNo             String?            @map("job_no")
+  rootLocationId    Int?               @map("root_location_id")
+  rootLocation      Location?          @relation("RequestRootLocation", fields: [rootLocationId], references: [id], onDelete: Restrict)
+  productionOrderNo String?            @map("production_order_no")
+  salesOrderNo      String?            @map("sales_order_no")
+  externalPoNo      String?            @map("external_po_no")
+  partCode          String?            @map("part_code")
+  measurementHeight Decimal?           @map("measurement_height") @db.Decimal(10, 2)
+  measurementWidth  Decimal?           @map("measurement_width") @db.Decimal(10, 2)
+  process           String?
+  sequence          Int?
+  machineId         Int?               @map("machine_id")
+  diecutLocation    String?            @map("diecut_location")
+  requestedByUserId Int                @map("requested_by_user_id")
+  status            AssetRequestStatus @default(PENDING)
+  remarks           String?
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  machine     Machine?           @relation(fields: [machineId], references: [id])
+  requestedBy User               @relation("AssetRequestRequestedBy", fields: [requestedByUserId], references: [id])
+  lines       AssetRequestLine[]
+
+  @@index([productionOrderNo])
+  @@index([jobNo])
+  @@index([rootLocationId])
+  @@index([salesOrderNo])
+  @@index([machineId])
+  @@index([requestedByUserId])
+  @@index([status])
+  @@map("asset_requests")
+}
+
+model AssetRequestLine {
+  id                Int      @id @default(autoincrement())
+  requestId         Int      @map("request_id")
+  preparedRecipientUserId Int? @map("prepared_recipient_user_id")
+  specificLocationId Int? @map("specific_location_id")
+  preparedRecipient User? @relation("PreparedRecipient", fields: [preparedRecipientUserId], references: [id], onDelete: Restrict)
+  specificLocation Location? @relation("PreparedSpecificLocation", fields: [specificLocationId], references: [id], onDelete: Restrict)
+  lineNo            Int      @map("line_no")
+  bladeSkuId        Int?     @map("blade_sku_id")
+  assetCategoryId   Int?     @map("asset_category_id")
+  measurementHeight Decimal? @map("measurement_height") @db.Decimal(10, 2)
+  measurementWidth  Decimal? @map("measurement_width") @db.Decimal(10, 2)
+  quantityRequested Int      @map("quantity_requested")
+  remarks           String?
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  request     AssetRequest             @relation(fields: [requestId], references: [id])
+  bladeSku    BladeSku?                @relation(fields: [bladeSkuId], references: [id])
+  assetCategory AssetCategory?         @relation(fields: [assetCategoryId], references: [id])
+  allocations AssetRequestAllocation[]
+
+  @@unique([requestId, lineNo])
+  @@index([preparedRecipientUserId])
+  @@index([specificLocationId])
+  @@index([requestId])
+  @@index([bladeSkuId])
+  @@index([assetCategoryId])
+  @@map("asset_request_lines")
+}
+
+enum ReturnPurpose {
+  NORMAL_RETURN
+  SWAP
+}
+
+enum SwapReason {
+  WRONG_ASSET
+  NOT_SUITABLE
+  WRONG_MEASUREMENT
+  CONDITION_ISSUE
+  OTHER
+}
+
+model AssetRequestAllocation {
+  id               Int                     @id @default(autoincrement())
+  requestLineId    Int                     @map("request_line_id")
+  assetId          Int                     @map("asset_id")
+  status           RequestAllocationStatus @default(RESERVED)
+  returnPurpose    ReturnPurpose           @default(NORMAL_RETURN) @map("return_purpose")
+  swapReason       SwapReason?             @map("swap_reason")
+  swapRemarks      String?                 @map("swap_remarks")
+  reservedByUserId Int                     @map("reserved_by_user_id")
+  reservedAt       DateTime                @default(now()) @map("reserved_at")
+  cancelledAt      DateTime?               @map("cancelled_at")
+  remarks          String?
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @updatedAt @map("updated_at")
+
+  requestLine AssetRequestLine @relation(fields: [requestLineId], references: [id])
+  asset       Asset            @relation(fields: [assetId], references: [id])
+  reservedBy  User             @relation("AllocationReservedBy", fields: [reservedByUserId], references: [id])
+  assignment  AssetAssignment?
+  scanConfirmations AssetScanConfirmation[]
+
+  @@index([requestLineId, status])
+  @@index([assetId, status])
+  @@index([reservedByUserId])
+  @@map("asset_request_allocations")
 }
 
 model Asset {
@@ -129,11 +330,15 @@ model Asset {
   assetCode    String         @unique @map("asset_code")
   itemName     String         @map("item_name")
   categoryId   Int            @map("category_id")
-  departmentId Int?           @map("department_id")
+  bladeSkuId   Int?           @map("blade_sku_id")
   locationId   Int?           @map("location_id")
+  homeLocationId Int?         @map("home_location_id")
+  homeLocation Location? @relation("AssetHomeLocation", fields: [homeLocationId], references: [id], onDelete: Restrict)
   serialNumber String?        @unique @map("serial_number")
   brand        String?
   model        String?
+  measurementHeight Decimal?     @map("measurement_height") @db.Decimal(10, 2)
+  measurementWidth  Decimal?     @map("measurement_width") @db.Decimal(10, 2)
   purchaseDate DateTime?      @map("purchase_date") @db.Date
   purchaseCost Decimal?       @map("purchase_cost") @db.Decimal(12, 2)
   status       AssetStatus    @default(AVAILABLE)
@@ -143,16 +348,19 @@ model Asset {
   createdAt    DateTime       @default(now()) @map("created_at")
   updatedAt    DateTime       @updatedAt @map("updated_at")
 
-  category    AssetCategory     @relation(fields: [categoryId], references: [id])
-  department  Department?       @relation(fields: [departmentId], references: [id])
-  location    Location?         @relation(fields: [locationId], references: [id])
-  epc         AssetEpc?
-  assignments AssetAssignment[]
-  movements   AssetMovement[]
+  category           AssetCategory            @relation(fields: [categoryId], references: [id])
+  bladeSku           BladeSku?                @relation(fields: [bladeSkuId], references: [id])
+  location           Location?                @relation(fields: [locationId], references: [id])
+  epc                AssetEpc?
+  assignments        AssetAssignment[]
+  movements          AssetMovement[]
+  requestAllocations AssetRequestAllocation[]
+  scanConfirmations  AssetScanConfirmation[]
 
   @@index([categoryId])
-  @@index([departmentId])
+  @@index([bladeSkuId])
   @@index([locationId])
+  @@index([homeLocationId])
   @@map("assets")
 }
 
@@ -182,9 +390,15 @@ model AssetAssignment {
   assignedByUserId Int              @map("assigned_by_user_id")
   departmentId     Int?             @map("department_id")
   locationId       Int?             @map("location_id")
+  requestAllocationId Int?          @unique @map("request_allocation_id")
   assignedDate     DateTime         @map("assigned_date") @db.Date
+  issuedAt         DateTime?        @map("issued_at")
   returnDueDate    DateTime?        @map("return_due_date") @db.Date
   returnedAt       DateTime?        @map("returned_at")
+  returnCondition  AssetCondition?  @map("return_condition")
+  returnLocationId Int?             @map("return_location_id")
+  returnRemarks    String?          @map("return_remarks")
+  returnedByUserId Int?             @map("returned_by_user_id")
   status           AssignmentStatus @default(ACTIVE)
   purpose          String?
   remarks          String?
@@ -196,14 +410,45 @@ model AssetAssignment {
   assignedToUser User        @relation("AssignedToUser", fields: [assignedToUserId], references: [id])
   assignedByUser User        @relation("AssignedByUser", fields: [assignedByUserId], references: [id])
   department     Department? @relation(fields: [departmentId], references: [id])
-  location       Location?   @relation(fields: [locationId], references: [id])
+  location       Location?   @relation("AssignmentLocation", fields: [locationId], references: [id])
+  returnLocation Location?   @relation("AssignmentReturnLocation", fields: [returnLocationId], references: [id])
+  returnedByUser User?       @relation("AssignmentReturnedBy", fields: [returnedByUserId], references: [id])
+  requestAllocation AssetRequestAllocation? @relation(fields: [requestAllocationId], references: [id])
+  scanConfirmations AssetScanConfirmation[]
 
   @@index([assetId])
   @@index([assignedToUserId])
   @@index([assignedByUserId])
   @@index([departmentId])
   @@index([locationId])
+  @@index([returnLocationId])
+  @@index([returnedByUserId])
   @@map("asset_assignments")
+}
+
+model AssetScanConfirmation {
+  id                  Int                @id @default(autoincrement())
+  assetId             Int                @map("asset_id")
+  requestAllocationId Int                @map("request_allocation_id")
+  assignmentId        Int?               @map("assignment_id")
+  confirmationType    ConfirmationType   @map("confirmation_type")
+  confirmationSource  ConfirmationSource @map("confirmation_source")
+  epc                 String
+  confirmedByUserId   Int                @map("confirmed_by_user_id")
+  confirmedAt         DateTime           @default(now()) @map("confirmed_at")
+  remarks             String?
+
+  asset             Asset                  @relation(fields: [assetId], references: [id])
+  requestAllocation AssetRequestAllocation @relation(fields: [requestAllocationId], references: [id])
+  assignment        AssetAssignment?       @relation(fields: [assignmentId], references: [id])
+  confirmedBy       User                   @relation("ConfirmationConfirmedBy", fields: [confirmedByUserId], references: [id])
+
+  @@index([assetId])
+  @@index([requestAllocationId])
+  @@index([assignmentId])
+  @@index([confirmedByUserId])
+  @@index([confirmedAt])
+  @@map("asset_scan_confirmations")
 }
 
 model AssetMovement {

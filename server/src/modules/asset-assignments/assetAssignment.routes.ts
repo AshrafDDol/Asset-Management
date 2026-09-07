@@ -6,6 +6,8 @@ import {
   getAssetAssignmentsController,
   getCurrentAssetAssignmentController,
   returnAssetAssignmentController,
+  initiateAssetReturnController,
+  confirmAssetReturnController,
   updateAssetAssignmentController,
 } from "./assetAssignment.controller";
 
@@ -19,5 +21,7 @@ router.get("/:id", getAssetAssignmentByIdController);
 router.post("/", createAssetAssignmentController);
 router.patch("/:id", updateAssetAssignmentController);
 router.patch("/:id/return", returnAssetAssignmentController);
+router.post("/:id/initiate-return", initiateAssetReturnController);
+router.post("/:id/confirm-return", confirmAssetReturnController);
 
 export default router;

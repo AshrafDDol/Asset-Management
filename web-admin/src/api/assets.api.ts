@@ -1,18 +1,22 @@
 import { api } from './axios';
 import type { AssetCategory } from './assetCategories.api';
-import type { Department } from './departments.api';
 import type { Location } from './locations.api';
+import type { BladeSku } from './bladeSkus.api';
 
 export type Asset = {
     id: number;
     assetCode: string;
     itemName: string;
     categoryId: number;
-    departmentId?: number | null;
+    bladeSkuId?: number | null;
     locationId?: number | null;
+    homeLocationId?: number | null;
+    homeLocation?: Location | null;
     serialNumber?: string | null;
     brand?: string;
     model?: string;
+    measurementHeight?: string | number | null;
+    measurementWidth?: string | number | null;
     purchaseDate?: string | null;
     purchaseCost?: number | null;
     status?: string;
@@ -23,32 +27,40 @@ export type Asset = {
     updatedAt?: string;
 
     category?: AssetCategory;
-    department?: Department;
     location?: Location;
+    bladeSku?: BladeSku | null;
+    epc?: { id: number; epcCode: string; status: string; isActive: boolean } | null;
+    locationPath?: string | null;
 };
 
 export type CreateAssetPayload = {
     assetCode: string;
-    itemName: string;
+    itemName?: string;
     categoryId: number;
-    departmentId?: number;
-    locationId?: number;
+    bladeSkuId?: number;
+    epcCode?: string;
+    autoGenerateEpc?: boolean;
+    locationId: number;
     serialNumber?: string;
     brand?: string;
     model?: string;
     purchaseDate?: string;
     purchaseCost?: number;
-    status?: string;
     condition?: string;
+    measurementHeight?: number | null;
+    measurementWidth?: number | null;
     remarks?: string;
 };
 
-export type UpdateAssetPayload = Partial<CreateAssetPayload> & {
+export type UpdateAssetPayload = Partial<Omit<CreateAssetPayload, "epcCode">> & {
+    homeLocationId?: number;
     isActive?: boolean;
 };
 
-function unwrapData<T>(response: any): T {
-    return response?.data?.data ?? response?.data ?? response;
+function unwrapData<T>(response: unknown): T {
+    const value = response as { data?: { data?: T } | T };
+    if (value.data && typeof value.data === "object" && "data" in value.data) return value.data.data as T;
+    return (value.data ?? response) as T;
 }
 
 export async function getAssetsApi(): Promise<Asset[]> {

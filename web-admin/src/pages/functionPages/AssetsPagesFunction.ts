@@ -1,22 +1,24 @@
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
 import { getAssetsApi, createAssetApi, updateAssetApi, type Asset } from '../../api/assets.api';
-import { type AssetCategory, getAssetCategoriesApi } from '../../api/assetCategories.api';
-import { type Department, getDepartmentsApi } from '../../api/departments.api';
+import { getAssetCategoriesApi, type AssetCategory } from '../../api/assetCategories.api';
 import { type Location, getLocationsApi } from '../../api/locations.api';
 
 type AssetFormState = {
     assetCode: string;
     itemName: string;
     categoryId: string;
-    departmentId: string;
+    measurementHeight: string;
+    measurementWidth: string;
+    epcCode: string;
+    autoGenerateEpc: boolean;
     locationId: string;
+    homeLocationId: string;
     serialNumber: string;
     brand: string;
     model: string;
     purchaseDate: string;
     purchaseCost: string;
-    status: string;
     condition: string;
     remarks: string;
     isActive: boolean;
@@ -26,31 +28,34 @@ const initialForm: AssetFormState = {
     assetCode: "",
     itemName: "",
     categoryId: "",
-    departmentId: "",
+    measurementHeight: "",
+    measurementWidth: "",
+    epcCode: "",
+    autoGenerateEpc: true,
     locationId: "",
+    homeLocationId: "",
     serialNumber: "",
     brand: "",
     model: "",
     purchaseDate: "",
     purchaseCost: "",
-    status: "",
     condition: "",
     remarks: "",
     isActive: true,
 };
 
-function validateForm(form: AssetFormState): string | null {
+function errorMessage(error: unknown, fallback: string) {
+    const value = error as { response?: { data?: { message?: string } }; message?: string };
+    return value.response?.data?.message || value.message || fallback;
+}
+
+function validateForm(form: AssetFormState, isEditing: boolean): string | null {
     if (!form.assetCode.trim()) {
         return "Asset code is required.";
     }
 
-    if (!form.itemName.trim()) {
-        return "Item name is required.";
-    }
-
-    if (!form.categoryId) {
-        return "Category is required.";
-    }
+    if (!form.categoryId) return "Asset Category is required.";
+    if (!isEditing && !form.locationId) return "Location is required.";
 
     return null;
 }
@@ -60,22 +65,29 @@ function buildCreatePayload(form: AssetFormState) {
         assetCode: form.assetCode.trim(),
         itemName: form.itemName.trim(),
         categoryId: Number(form.categoryId),
-        departmentId: form.departmentId ? Number(form.departmentId) : undefined,
-        locationId: form.locationId ? Number(form.locationId) : undefined,
+        measurementHeight: form.measurementHeight ? Number(form.measurementHeight) : null,
+        measurementWidth: form.measurementWidth ? Number(form.measurementWidth) : null,
+        epcCode: form.autoGenerateEpc ? undefined : form.epcCode.trim() || undefined,
+        autoGenerateEpc: form.autoGenerateEpc,
+        locationId: Number(form.locationId),
         serialNumber: form.serialNumber.trim() || undefined,
         brand: form.brand.trim() || undefined,
         model: form.model.trim() || undefined,
         purchaseDate: form.purchaseDate || undefined,
         purchaseCost: form.purchaseCost ? Number(form.purchaseCost) : undefined,
-        status: form.status.trim() || undefined,
         condition: form.condition.trim() || undefined,
         remarks: form.remarks.trim() || undefined,
     };
 }
 
-function buildUpdatePayload(form: AssetFormState) {
+function buildUpdatePayload(form: AssetFormState, includeLocation: boolean, initializeHome: boolean) {
+    const payload = buildCreatePayload(form);
     return {
-        ...buildCreatePayload(form),
+        ...payload,
+        locationId: includeLocation && form.locationId ? Number(form.locationId) : undefined,
+        homeLocationId: initializeHome && form.homeLocationId ? Number(form.homeLocationId) : undefined,
+        epcCode: undefined,
+        autoGenerateEpc: undefined,
         isActive: form.isActive,
     };
 }
@@ -83,7 +95,6 @@ function buildUpdatePayload(form: AssetFormState) {
 export function useAssetsPagesFunction() {
     const [assets, setAssets] = useState<Asset[]>([]);
     const [assetCategories, setAssetCategories] = useState<AssetCategory[]>([]);
-    const [departments, setDepartments] = useState<Department[]>([]);
     const [locations, setLocations] = useState<Location[]>([]);
     const [form, setForm] = useState<AssetFormState>(initialForm);
 
@@ -91,8 +102,11 @@ export function useAssetsPagesFunction() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState("");
+    const [createdEpc, setCreatedEpc] = useState("");
 
     const isEditing = editingAssetId !== null;
+    const locationLocked = isEditing && assets.find((asset) => asset.id === editingAssetId)?.status !== "AVAILABLE";
+    const homeNeedsVerification = !!isEditing && assets.find((asset) => asset.id === editingAssetId)?.homeLocationId == null;
 
     function updateForm<K extends keyof AssetFormState>(
         key: K,
@@ -114,24 +128,18 @@ export function useAssetsPagesFunction() {
             setLoading(true);
             setError("");
 
-            const [assetData, categoryData, departmentData, locationData] =
+            const [assetData, categoryData, locationData] =
                 await Promise.all([
                     getAssetsApi(),
                     getAssetCategoriesApi(),
-                    getDepartmentsApi(),
                     getLocationsApi(),
                 ]);
             
             setAssets(Array.isArray(assetData) ? assetData : []);
             setAssetCategories(Array.isArray(categoryData) ? categoryData : []);
-            setDepartments(Array.isArray(departmentData) ? departmentData : []);
             setLocations(Array.isArray(locationData) ? locationData : []);
-        } catch (err: any) {
-            setError(
-                err?.response?.data?.message ||
-                    err?.message ||
-                    "Failed to load data. Please try again."
-            );
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to load data. Please try again."));
         } finally {
             setLoading(false);
         }
@@ -143,9 +151,13 @@ export function useAssetsPagesFunction() {
         setForm({
             assetCode: asset.assetCode || "",
             itemName: asset.itemName || "",
-            categoryId: asset.categoryId ? String(asset.categoryId) : "",
-            departmentId: asset.departmentId ? String(asset.departmentId) : "",
+            categoryId: String(asset.categoryId),
+            measurementHeight: asset.measurementHeight == null ? "" : String(asset.measurementHeight),
+            measurementWidth: asset.measurementWidth == null ? "" : String(asset.measurementWidth),
+            epcCode: "",
+            autoGenerateEpc: true,
             locationId: asset.locationId ? String(asset.locationId) : "",
+            homeLocationId: asset.homeLocationId ? String(asset.homeLocationId) : "",
             serialNumber: asset.serialNumber || "",
             brand: asset.brand || "",
             model: asset.model || "",
@@ -154,7 +166,6 @@ export function useAssetsPagesFunction() {
                 asset.purchaseCost !== null && asset.purchaseCost !== undefined
                 ? String(asset.purchaseCost)
                 : "",
-            status: asset.status || "",
             condition: asset.condition || "",
             remarks: asset.remarks || "",
             isActive: asset.isActive !== false,
@@ -170,7 +181,7 @@ export function useAssetsPagesFunction() {
     async function handleSubmitAsset(event: FormEvent) {
         event.preventDefault();
 
-        const validationError = validateForm(form);
+        const validationError = validateForm(form, isEditing);
 
         if (validationError) {
             setError(validationError);
@@ -180,41 +191,43 @@ export function useAssetsPagesFunction() {
         try {
             setSaving(true);
             setError("");
+            setCreatedEpc("");
 
             if (isEditing && editingAssetId) {
-                await updateAssetApi(editingAssetId, buildUpdatePayload(form));
+                await updateAssetApi(editingAssetId, buildUpdatePayload(form, !locationLocked, locationLocked && homeNeedsVerification));
             } else {
-                await createAssetApi(buildCreatePayload(form));
+                const created = await createAssetApi(buildCreatePayload(form));
+                setCreatedEpc(created.epc?.epcCode || "");
             }
 
             setForm(initialForm);
             setEditingAssetId(null);
             await loadAssets();
-        } catch (err: any) {
-            setError(
-                err?.response?.data?.message ||
-                    err?.message ||
-                    "Failed to save asset. Please try again."
-            );
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to save asset. Please try again."));
         } finally {
             setSaving(false);
         }
     }
 
     useEffect(() => {
-        loadPageData();
+        // Initial data fetch is the external synchronization owned by this effect.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        void loadPageData();
     }, []);
 
     return {
         assets,
         assetCategories,
-        departments,
         locations,
         form,
         loading,
         saving,
         error,
+        createdEpc,
         isEditing,
+        locationLocked,
+        homeNeedsVerification,
         updateForm,
         loadPageData,
         handleEditAsset,

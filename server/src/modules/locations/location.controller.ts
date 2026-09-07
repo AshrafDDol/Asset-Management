@@ -1,12 +1,15 @@
 import { NextFunction, Request, Response } from "express";
 import { successResponse} from "../../utils/apiResponse";
+import { AppError } from "../../utils/AppError";
 
 import { 
     createLocation, 
     updateLocation, 
     deleteLocation, 
     getLocationById, 
-    getAllLocations 
+    getAllLocations,
+    getLocationPath,
+    getLocationTree,
 } from "./location.services";
 
 export async function getLocationsController (
@@ -15,13 +18,48 @@ export async function getLocationsController (
     next: NextFunction
 ) {
     try {
-        const locations = await getAllLocations();
+        const parentId = req.query.parentId === undefined
+            ? undefined
+            : req.query.parentId === "null"
+                ? null
+                : Number(req.query.parentId);
+        if (typeof parentId === "number" && (!Number.isInteger(parentId) || parentId <= 0)) {
+            throw new AppError("parentId must be a valid ID", 400);
+        }
+        const locations = await getAllLocations({
+            parentId,
+            locationType: typeof req.query.type === "string" ? req.query.type : undefined,
+        });
 
         return successResponse(
             res,
             "Locations retrieved successfully",
             locations
         );
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function getLocationTreeController(
+    req: Request,
+    res: Response,
+    next: NextFunction
+) {
+    try {
+        return successResponse(res, "Location tree retrieved successfully", await getLocationTree());
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function getLocationPathController(
+    req: Request,
+    res: Response,
+    next: NextFunction
+) {
+    try {
+        return successResponse(res, "Location path retrieved successfully", await getLocationPath(Number(req.params.id)));
     } catch (error) {
         next(error);
     }

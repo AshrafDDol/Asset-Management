@@ -34,14 +34,6 @@ const ASSET_EPC_SELECT = {
                 },
             },
 
-            department: {
-                select: {
-                    id: true,
-                    departmentCode: true,
-                    name: true,
-                },
-            },
-
             location: {
                 select: {
                     id: true,

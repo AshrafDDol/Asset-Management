@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { successResponse } from "../../utils/apiResponse";
 import { createAsset, updateAsset, deleteAsset, getAllAssets, getAssetById } from "./asset.service";
+import { AppError } from "../../utils/AppError";
 
 export async function getAssetsController (
     req: Request,
@@ -8,7 +9,18 @@ export async function getAssetsController (
     next: NextFunction
 ) {
     try {
-        const assets = await getAllAssets();
+        const parseId = (value: unknown, name: string) => {
+            if (value === undefined) return undefined;
+            const parsed = Number(value);
+            if (!Number.isInteger(parsed) || parsed <= 0) throw new AppError(`${name} must be a valid ID`, 400);
+            return parsed;
+        };
+        const assets = await getAllAssets({
+            bladeSkuId: parseId(req.query.bladeSkuId, "bladeSkuId"),
+            locationId: parseId(req.query.locationId, "locationId"),
+            status: typeof req.query.status === "string" ? req.query.status : undefined,
+            assetCode: typeof req.query.assetCode === "string" ? req.query.assetCode : undefined,
+        });
 
         return successResponse (
             res,

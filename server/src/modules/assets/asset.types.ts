@@ -1,19 +1,31 @@
 export type CreateAssetInput = {
     assetCode: string;
-    itemName: string;
+    itemName?: string;
     categoryId: number;
-    departmentId?: number;
-    locationId?: number;
+    bladeSkuId?: number;
+    locationId: number;
+    epc?: string;
+    epcCode?: string;
+    autoGenerateEpc?: boolean;
     serialNumber?: string;
     brand?: string;
     model?: string;
     purchaseDate?: string;
     purchaseCost?: number;
-    status?: string;
     condition?: string;
+    measurementHeight?: number | string | null;
+    measurementWidth?: number | string | null;
     remarks?: string;
 };
 
-export type UpdateAssetInput = Partial<CreateAssetInput> & {
+export type UpdateAssetInput = Partial<Omit<CreateAssetInput, "epc" | "epcCode" | "autoGenerateEpc">> & {
+    homeLocationId?: number;
     isActive?: boolean;
+};
+
+export type AssetFilters = {
+    bladeSkuId?: number;
+    status?: string;
+    locationId?: number;
+    assetCode?: string;
 };

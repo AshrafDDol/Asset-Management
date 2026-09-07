@@ -2,6 +2,7 @@ import { MovementType } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AppError } from "../../utils/AppError";
 import { CreateAssetMovementInput } from "./assetMovement.types";
+import { loadLocationHierarchy, resolveLocationDepartment } from "../locations/locationHierarchy";
 
 const ASSET_MOVEMENT_SELECT = {
   id: true,
@@ -244,20 +245,24 @@ export async function createAssetMovement(
   await validateDepartment(toDepartmentId);
   await validateLocation(toLocationId);
 
-  const movementType = getMovementType(
-    asset.departmentId,
-    toDepartmentId,
-    asset.locationId,
-    toLocationId,
-  );
-
   const movement = await prisma.$transaction(async (tx) => {
+    const locationHierarchy = await loadLocationHierarchy(tx);
+    const fromDepartmentId = resolveLocationDepartment(asset.locationId, locationHierarchy)?.id ?? null;
+    const resolvedToDepartmentId = toLocationId
+      ? resolveLocationDepartment(toLocationId, locationHierarchy)?.id ?? null
+      : toDepartmentId ?? null;
+    const movementType = getMovementType(
+      fromDepartmentId,
+      resolvedToDepartmentId,
+      asset.locationId,
+      toLocationId,
+    );
     const createdMovement = await tx.assetMovement.create({
       data: {
         movementNo: generateMovementNo(),
         assetId,
-        fromDepartmentId: asset.departmentId,
-        toDepartmentId: toDepartmentId ?? null,
+        fromDepartmentId,
+        toDepartmentId: resolvedToDepartmentId,
         fromLocationId: asset.locationId,
         toLocationId: toLocationId ?? null,
         movedByUserId,
@@ -272,7 +277,6 @@ export async function createAssetMovement(
     await tx.asset.update({
       where: { id: assetId },
       data: {
-        departmentId: toDepartmentId ?? asset.departmentId,
         locationId: toLocationId ?? asset.locationId,
       },
     });

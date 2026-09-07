@@ -9,6 +9,10 @@ import assetRoutes from "../modules/assets/asset.routes";
 import assetEpcRoutes from "../modules/asset-epcs/assetEpc.routes";
 import assetAssignmentRoutes from "../modules/asset-assignments/assetAssignment.routes";
 import assetMovementRoutes from "../modules/asset-movements/assetMovement.routes";
+import bladeSkuRoutes from "../modules/blade-skus/bladeSku.routes";
+import machineRoutes from "../modules/machines/machine.routes";
+import assetRequestRoutes from "../modules/asset-requests/assetRequest.routes";
+import assetRequestAllocationRoutes from "../modules/asset-request-allocations/assetRequestAllocation.routes";
 
 const router = Router();
 
@@ -30,5 +34,9 @@ router.use("/assets", assetRoutes);
 router.use("/asset-epcs", assetEpcRoutes);
 router.use("/asset-assignments", assetAssignmentRoutes);
 router.use("/asset-movements", assetMovementRoutes);
+router.use("/blade-skus", bladeSkuRoutes);
+router.use("/machines", machineRoutes);
+router.use("/asset-requests", assetRequestRoutes);
+router.use("/asset-request-allocations", assetRequestAllocationRoutes);
 
 export default router;

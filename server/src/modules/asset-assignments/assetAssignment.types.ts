@@ -18,3 +18,22 @@ export type UpdateAssetAssignmentInput = {
     purpose?: string;
     remarks?: string;
 };
+
+export type ReturnAssetAssignmentInput = {
+    condition?: string;
+    returnLocationId?: number;
+    remarks?: string;
+};
+
+export type InitiateReturnInput = {
+    returnPurpose?: "NORMAL_RETURN" | "SWAP";
+    swapReason?: string;
+    remarks?: string;
+};
+
+export type ConfirmReturnInput = {
+    epc: string;
+    condition: string;
+    returnLocationId?: number;
+    remarks?: string;
+};
