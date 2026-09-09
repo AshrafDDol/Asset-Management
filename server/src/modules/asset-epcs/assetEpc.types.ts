@@ -12,3 +12,9 @@ export type UpdateAssetEpcInput = {
     remarks?: string;
     isActive?: boolean;
 };
+
+export type ManageAssetEpcInput = {
+    epcCode?: string;
+    autoGenerateEpc?: boolean;
+    remarks?: string;
+};

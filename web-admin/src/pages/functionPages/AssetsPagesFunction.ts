@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
-import { getAssetsApi, createAssetApi, updateAssetApi, type Asset } from '../../api/assets.api';
+import { getAssetsApi, createAssetApi, updateAssetApi, deleteAssetApi, type Asset } from '../../api/assets.api';
 import { getAssetCategoriesApi, type AssetCategory } from '../../api/assetCategories.api';
 import { type Location, getLocationsApi } from '../../api/locations.api';
 
@@ -54,6 +54,7 @@ function validateForm(form: AssetFormState, isEditing: boolean): string | null {
         return "Asset code is required.";
     }
 
+    if (!form.itemName.trim()) return "Item name is required.";
     if (!form.categoryId) return "Asset Category is required.";
     if (!isEditing && !form.locationId) return "Location is required.";
 
@@ -185,7 +186,7 @@ export function useAssetsPagesFunction() {
 
         if (validationError) {
             setError(validationError);
-            return;
+            return false;
         }
 
         try {
@@ -203,11 +204,27 @@ export function useAssetsPagesFunction() {
             setForm(initialForm);
             setEditingAssetId(null);
             await loadAssets();
+            return true;
         } catch (err: unknown) {
             setError(errorMessage(err, "Failed to save asset. Please try again."));
+            return false;
         } finally {
             setSaving(false);
         }
+    }
+
+    async function handleDeleteAsset() {
+        if (!editingAssetId) return false;
+        try {
+            setSaving(true); setError("");
+            await deleteAssetApi(editingAssetId);
+            setEditingAssetId(null); setForm(initialForm);
+            await loadAssets();
+            return true;
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to delete asset."));
+            return false;
+        } finally { setSaving(false); }
     }
 
     useEffect(() => {
@@ -226,6 +243,7 @@ export function useAssetsPagesFunction() {
         error,
         createdEpc,
         isEditing,
+        editingAssetId,
         locationLocked,
         homeNeedsVerification,
         updateForm,
@@ -233,5 +251,6 @@ export function useAssetsPagesFunction() {
         handleEditAsset,
         handleCancelEdit,
         handleSubmitAsset,
+        handleDeleteAsset,
     };
 }

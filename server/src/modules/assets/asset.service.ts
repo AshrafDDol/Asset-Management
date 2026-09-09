@@ -1,16 +1,15 @@
 import { validateHomeLocation } from "./assetHome";
 import { AssetCondition, AssetStatus, Prisma } from "@prisma/client";
-import { randomBytes } from "crypto";
 import { AppError } from "../../utils/AppError";
 import { prisma } from "../../config/prisma";
 import { AssetFilters, CreateAssetInput, UpdateAssetInput } from "./asset.types";
+import { generateEpcCode, validateNewEpcCode } from "../asset-epcs/assetEpc.services";
 
 const ASSET_SELECT = {
   id: true,
   assetCode: true,
   itemName: true,
   categoryId: true,
-  bladeSkuId: true,
   locationId: true,
   homeLocationId: true,
   homeLocation: { select: { id: true, name: true, locationCode: true, parentLocationId: true, isActive: true, locationType: true } },
@@ -28,16 +27,6 @@ const ASSET_SELECT = {
   createdAt: true,
   updatedAt: true,
   category: { select: { id: true, categoryCode: true, name: true } },
-  bladeSku: {
-    select: {
-      id: true,
-      skuCode: true,
-      name: true,
-      bladeType: true,
-      specification: true,
-      isActive: true,
-    },
-  },
   location: {
     select: { id: true, locationCode: true, name: true, locationType: true, parentLocationId: true },
   },
@@ -105,10 +94,16 @@ async function addLocationPaths<T extends { location: { id: number } | null }>(a
 export async function getAllAssets(filters: AssetFilters = {}) {
   const assets = await prisma.asset.findMany({
     where: {
-      bladeSkuId: filters.bladeSkuId,
       status: validateFilterStatus(filters.status),
       locationId: filters.locationId,
+      homeLocationId: filters.homeLocationId,
+      categoryId: filters.categoryId,
+      condition: validateCondition(filters.condition),
       assetCode: filters.assetCode ? { contains: filters.assetCode.trim() } : undefined,
+      itemName: filters.itemName ? { contains: filters.itemName.trim() } : undefined,
+      measurementHeight: filters.measurementHeight === undefined ? undefined : new Prisma.Decimal(filters.measurementHeight),
+      measurementWidth: filters.measurementWidth === undefined ? undefined : new Prisma.Decimal(filters.measurementWidth),
+      epc: filters.epc ? { epcCode: { contains: filters.epc.trim().toUpperCase() } } : undefined,
     },
     select: ASSET_SELECT,
     orderBy: { createdAt: "desc" },
@@ -126,11 +121,12 @@ export async function getAssetById(id: number) {
 export async function createAsset(input: CreateAssetInput) {
   const assetCode = input.assetCode?.trim().toUpperCase();
   const serialNumber = input.serialNumber?.trim() || null;
-  const suppliedEpc = input.epc?.trim().toUpperCase() || input.epcCode?.trim().toUpperCase() || null;
+  const suppliedEpcValue = input.epc?.trim().toUpperCase() || input.epcCode?.trim().toUpperCase() || null;
   if (input.epc && input.epcCode && input.epc.trim().toUpperCase() !== input.epcCode.trim().toUpperCase()) {
     throw new AppError("epc and epcCode must match when both are supplied", 400);
   }
-  if (suppliedEpc && input.autoGenerateEpc) throw new AppError("Supply an EPC or request auto-generation, not both", 400);
+  if (suppliedEpcValue && input.autoGenerateEpc) throw new AppError("Supply an EPC or request auto-generation, not both", 400);
+  const suppliedEpc = suppliedEpcValue ? validateNewEpcCode(suppliedEpcValue) : null;
   const autoGenerateEpc = input.autoGenerateEpc === true && !suppliedEpc;
   if (!assetCode) throw new AppError("Asset code is required", 400);
 
@@ -142,7 +138,7 @@ export async function createAsset(input: CreateAssetInput) {
 
   const attempts = autoGenerateEpc ? 5 : 1;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    const epcCode = suppliedEpc || (autoGenerateEpc ? randomBytes(12).toString("hex").toUpperCase() : null);
+    const epcCode = suppliedEpc || (autoGenerateEpc ? generateEpcCode() : null);
     try {
       const asset = await prisma.$transaction(async (tx) => {
         await validateHomeLocation(tx, Number(input.locationId));
@@ -151,7 +147,6 @@ export async function createAsset(input: CreateAssetInput) {
             assetCode,
             itemName: input.itemName?.trim() || category.name,
             categoryId: category.id,
-            bladeSkuId: null,
             locationId: Number(input.locationId),
             homeLocationId: Number(input.locationId),
             serialNumber,
@@ -212,7 +207,7 @@ export async function updateAsset(id: number, input: UpdateAssetInput) {
       if (locked.status !== AssetStatus.AVAILABLE) throw new AppError("Home/current location can only be changed while the Asset is AVAILABLE", 409);
       const [assignment, allocation] = await Promise.all([
         tx.assetAssignment.findFirst({ where: { assetId: id, status: "ACTIVE", isActive: true } }),
-        tx.assetRequestAllocation.findFirst({ where: { assetId: id, status: { in: ["RESERVED", "ISSUED", "CONFIRMED", "RETURN_PENDING"] } } }),
+        tx.issueBatchItem.findFirst({ where: { assetId: id, status: { in: ["RESERVED", "ISSUED", "CONFIRMED"] } } }),
       ]);
       if (assignment || allocation) throw new AppError("Asset has an operational claim; location edit is blocked", 409);
       await validateHomeLocation(tx, input.locationId);
@@ -243,7 +238,34 @@ export async function updateAsset(id: number, input: UpdateAssetInput) {
 }
 
 export async function deleteAsset(id: number) {
-  await getAssetById(id);
-  const asset = await prisma.asset.update({ where: { id }, data: { isActive: false }, select: ASSET_SELECT });
-  return (await addLocationPaths([asset]))[0];
+  if (!Number.isInteger(id) || id <= 0) throw new AppError("Invalid asset ID", 400);
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const asset = await tx.asset.findUnique({ where: { id }, select: { id: true, assetCode: true, status: true } });
+      if (!asset) throw new AppError("Asset not found", 404);
+      if (asset.status !== AssetStatus.AVAILABLE) {
+        throw new AppError("Cannot delete this Asset while it is in an operational lifecycle state.", 409);
+      }
+      const [activeItem, activeAssignment, itemCount, assignmentCount, confirmationCount, movementCount] = await Promise.all([
+        tx.issueBatchItem.findFirst({ where: { assetId: id, status: { in: ["RESERVED", "ISSUED", "CONFIRMED"] } }, select: { id: true } }),
+        tx.assetAssignment.findFirst({ where: { assetId: id, status: "ACTIVE", isActive: true }, select: { id: true } }),
+        tx.issueBatchItem.count({ where: { assetId: id } }),
+        tx.assetAssignment.count({ where: { assetId: id } }),
+        tx.assetScanConfirmation.count({ where: { assetId: id } }),
+        tx.assetMovement.count({ where: { assetId: id } }),
+      ]);
+      if (activeItem || activeAssignment) throw new AppError("Cannot delete this Asset because it has an active operational claim.", 409);
+      if (itemCount || assignmentCount || confirmationCount || movementCount) {
+        throw new AppError("Cannot delete this Asset because it has lifecycle history.", 409);
+      }
+      await tx.assetEpc.deleteMany({ where: { assetId: id } });
+      await tx.asset.delete({ where: { id } });
+      return asset;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+      throw new AppError("Cannot delete this Asset because it is referenced by operational history.", 409);
+    }
+    throw error;
+  }
 }

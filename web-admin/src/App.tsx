@@ -8,13 +8,10 @@ import { AssetCategoriesPages } from "./pages/AssetCategoriesPages";
 import { UsersPages } from "./pages/UsersPages";
 import { RolesPages } from "./pages/RolesPages";
 import { AssetMovementsPage } from "./pages/AssetMovementPages";
-import { RepairsPage } from "./pages/RepairPages";
 import { AssetsPages } from "./pages/AssetsPages";
 import "./App.css";
 import { Layout } from "./components/Layout";
-import { BladeSkusPages } from "./pages/BladeSkusPages";
-import { MachinesPages } from "./pages/MachinesPages";
-import { AssetRequestsPages } from "./pages/AssetRequestsPages";
+import { IssueBatchesPages } from "./pages/IssueBatchesPages";
 
 function App() {
   return (
@@ -28,13 +25,10 @@ function App() {
             <Route path="/departments" element={<DepartmentsPages />} />
             <Route path="/assets" element={<AssetsPages />} />
             <Route path="/asset-categories" element={<AssetCategoriesPages />} />
-            <Route path="/blade-skus" element={<BladeSkusPages />} />
-            <Route path="/machines" element={<MachinesPages />} />
-            <Route path="/asset-requests" element={<AssetRequestsPages />} />
+            <Route path="/issue-batches" element={<IssueBatchesPages />} />
             <Route path="/users" element={<UsersPages />} />
             <Route path="/roles" element={<RolesPages />} />
             <Route path="/asset-movements" element={<AssetMovementsPage />} />
-            <Route path="/repairs" element={<RepairsPage />} />
           </Route>
         </Route>
     </Routes>

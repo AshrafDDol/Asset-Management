@@ -1,6 +1,7 @@
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
-import { type Role, createRoleApi, getRolesApi, updateRoleApi } from '../../api/roles.api';
+import { type Role, createRoleApi, getRolesApi, updateRoleApi, deleteRoleApi } from '../../api/roles.api';
+import { errorMessage } from '../../utils/errorMessage';
 
 type RoleFormState = {
     name: string;
@@ -58,12 +59,8 @@ export function useRolesPagesFunction() {
 
             const data = await getRolesApi();
             setRoles(Array.isArray(data) ? data : []);
-        } catch (err: any) {
-            setError(
-                err?.reponse?.data?.message ||
-                    err?.message ||
-                    "Failed to load roles."
-            );
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to load Roles."));
         } finally {
             setLoading(false);
         }
@@ -108,25 +105,40 @@ export function useRolesPagesFunction() {
             setForm(initialForm);
             setEditingRoleId(null);
             await loadRoles();
-        } catch (err: any) {
-            setError(
-                err?.response?.data?.message ||
-                    err?.message ||
-                    "Failed to save role."
-            );
+            return true;
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to save Role."));
         } finally {
             setSaving(false);
         }
+        return false;
+    }
+
+    async function handleDeleteRole() {
+        if (!editingRoleId) return false;
+        try {
+            setSaving(true); setError("");
+            await deleteRoleApi(editingRoleId);
+            setEditingRoleId(null); setForm(initialForm);
+            await loadRoles();
+            return true;
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to delete Role."));
+            return false;
+        } finally { setSaving(false); }
     }
 
     useEffect(() => {
-        loadRoles();
+        // Initial API synchronization is intentionally owned by this effect.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        void loadRoles();
     }, []);
 
     return {
         roles,
         form,
         isEditing,
+        editingRoleId,
         loading,
         saving,
         error,
@@ -135,6 +147,7 @@ export function useRolesPagesFunction() {
         handleEditRole,
         handleCancelEdit,
         handleSubmitRole,
+        handleDeleteRole,
     };
 }
 

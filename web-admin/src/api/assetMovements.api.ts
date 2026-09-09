@@ -25,6 +25,7 @@ export type AssetMovement = {
   movementDate: string;
   reason?: string | null;
   remarks?: string | null;
+  issueBatchItem?: { issueBatch: { jobNo?: string | null } } | null;
   asset: { id: number; assetCode: string; itemName: string; status: string; condition: string };
   movedByUser: { id: number; username: string; fullName: string };
   fromDepartment: MovementDepartment;

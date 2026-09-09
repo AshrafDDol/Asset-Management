@@ -15,11 +15,23 @@ export async function getAssetsController (
             if (!Number.isInteger(parsed) || parsed <= 0) throw new AppError(`${name} must be a valid ID`, 400);
             return parsed;
         };
+        const parseMeasurement = (value: unknown, name: string) => {
+            if (value === undefined) return undefined;
+            const parsed = Number(value);
+            if (!Number.isFinite(parsed) || parsed <= 0) throw new AppError(`${name} must be greater than zero`, 400);
+            return parsed;
+        };
         const assets = await getAllAssets({
-            bladeSkuId: parseId(req.query.bladeSkuId, "bladeSkuId"),
             locationId: parseId(req.query.locationId, "locationId"),
             status: typeof req.query.status === "string" ? req.query.status : undefined,
             assetCode: typeof req.query.assetCode === "string" ? req.query.assetCode : undefined,
+            itemName: typeof req.query.itemName === "string" ? req.query.itemName : undefined,
+            categoryId: parseId(req.query.categoryId, "categoryId"),
+            homeLocationId: parseId(req.query.homeLocationId, "homeLocationId"),
+            epc: typeof req.query.epc === "string" ? req.query.epc : undefined,
+            condition: typeof req.query.condition === "string" ? req.query.condition : undefined,
+            measurementHeight: parseMeasurement(req.query.measurementHeight, "measurementHeight"),
+            measurementWidth: parseMeasurement(req.query.measurementWidth, "measurementWidth"),
         });
 
         return successResponse (

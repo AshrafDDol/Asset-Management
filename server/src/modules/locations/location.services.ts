@@ -1,4 +1,4 @@
-import { LocationType } from "@prisma/client";
+import { LocationType, Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AppError } from "../../utils/AppError";
 import { CreateLocationInput, LocationFilters, UpdateLocationInput } from "./location.types";
@@ -148,7 +148,33 @@ export async function updateLocation(id: number, input: UpdateLocationInput) {
 }
 
 export async function deleteLocation(id: number) {
-  await getLocationById(id);
-  await prisma.location.update({ where: { id }, data: { isActive: false }, include: LOCATION_INCLUDE });
-  return getLocationById(id);
+  if (!Number.isInteger(id) || id <= 0) throw new AppError("Invalid location ID", 400);
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const location = await tx.location.findUnique({ where: { id } });
+      if (!location) throw new AppError("Location not found", 404);
+      const [children, currentAssets, homeAssets, defaultBatches, batchItems, assignments, returnAssignments, fromMovements, toMovements] = await Promise.all([
+        tx.location.count({ where: { parentLocationId: id } }),
+        tx.asset.count({ where: { locationId: id } }),
+        tx.asset.count({ where: { homeLocationId: id } }),
+        tx.issueBatch.count({ where: { defaultToLocationId: id } }),
+        tx.issueBatchItem.count({ where: { toLocationId: id } }),
+        tx.assetAssignment.count({ where: { locationId: id } }),
+        tx.assetAssignment.count({ where: { returnLocationId: id } }),
+        tx.assetMovement.count({ where: { fromLocationId: id } }),
+        tx.assetMovement.count({ where: { toLocationId: id } }),
+      ]);
+      if (children) throw new AppError("Cannot delete this Location because it has child Locations.", 409);
+      if (currentAssets || homeAssets || defaultBatches || batchItems || assignments || returnAssignments || fromMovements || toMovements) {
+        throw new AppError("Cannot delete this Location because Assets or history records reference it.", 409);
+      }
+      await tx.location.delete({ where: { id } });
+      return location;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+      throw new AppError("Cannot delete this Location because another record references it.", 409);
+    }
+    throw error;
+  }
 }

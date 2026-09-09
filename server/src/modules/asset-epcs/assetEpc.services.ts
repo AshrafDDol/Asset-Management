@@ -1,7 +1,11 @@
 import { prisma } from "../../config/prisma";
-import { EpcStatus } from "@prisma/client";
+import { AssetStatus, EpcStatus, Prisma } from "@prisma/client";
+import { randomBytes } from "crypto";
 import { AppError } from "../../utils/AppError";
-import { CreateAssetEpcInput, UpdateAssetEpcInput } from "./assetEpc.types";
+import { CreateAssetEpcInput, ManageAssetEpcInput, UpdateAssetEpcInput } from "./assetEpc.types";
+
+const EPC_LENGTH = 24;
+const EPC_MUTABLE_ASSET_STATUSES: AssetStatus[] = [AssetStatus.AVAILABLE, AssetStatus.RESERVED];
 
 const ASSET_EPC_SELECT = {
     id: true,
@@ -55,8 +59,26 @@ function validateEpcStatus(status?: string) {
     return status as EpcStatus;
 }
 
-function normalizeEpcCode(epcCode?: string) {
+export function normalizeEpcCode(epcCode?: string) {
     return epcCode?.trim().toUpperCase();
+}
+
+export function validateNewEpcCode(epcCode?: string) {
+    const normalized = normalizeEpcCode(epcCode);
+    if (!normalized) throw new AppError("EPC code is required", 400);
+    if (!new RegExp(`^[0-9A-F]{${EPC_LENGTH}}$`).test(normalized)) throw new AppError(`EPC code must be exactly ${EPC_LENGTH} hexadecimal characters`, 400);
+    return normalized;
+}
+
+export function generateEpcCode() {
+    return randomBytes(EPC_LENGTH / 2).toString("hex").toUpperCase();
+}
+
+function assertEpcMutableAsset(asset: { isActive: boolean; status: AssetStatus }) {
+    if (!asset.isActive) throw new AppError("Asset not found or inactive", 404);
+    if (!EPC_MUTABLE_ASSET_STATUSES.includes(asset.status)) {
+        throw new AppError("EPC can only be assigned or replaced while the Asset is AVAILABLE or RESERVED", 409);
+    }
 }
 
 export async function getAllAssetEpcs() {
@@ -107,11 +129,7 @@ export async function getAssetEpcByCode(epcCodeParam: string) {
 }
 
 export async function createAssetEpc(input: CreateAssetEpcInput) {
-    const epcCode = normalizeEpcCode(input.epcCode);
-
-    if (!epcCode) {
-        throw new AppError("EPC code is required", 400);
-    }
+    const epcCode = validateNewEpcCode(input.epcCode);
 
     if (!input.assetId) {
         throw new AppError("Asset ID is required", 400);
@@ -121,9 +139,8 @@ export async function createAssetEpc(input: CreateAssetEpcInput) {
         where: { id: input.assetId },
     });
 
-    if (!asset || !asset.isActive) {
-        throw new AppError("Asset not found or inactive", 404);
-    }
+    if (!asset) throw new AppError("Asset not found or inactive", 404);
+    assertEpcMutableAsset(asset);
 
     const existingEpc = await prisma.assetEpc.findUnique({
         where: { epcCode },
@@ -165,13 +182,15 @@ export async function updateAssetEpc (
 
     const existingAssetEpc = await prisma.assetEpc.findUnique({
         where: { id },
+        include: { asset: true },
     });
 
     if (!existingAssetEpc) {
         throw new AppError("Asset EPC not found", 404);
     }
 
-    const epcCode = normalizeEpcCode(input.epcCode);
+    assertEpcMutableAsset(existingAssetEpc.asset);
+    const epcCode = input.epcCode === undefined ? undefined : validateNewEpcCode(input.epcCode);
 
     if (epcCode) {
         const duplicateEpc = await prisma.assetEpc.findFirst({
@@ -193,9 +212,8 @@ export async function updateAssetEpc (
             where: { id: input.assetId },
         });
 
-        if (!asset || !asset.isActive) {
-            throw new AppError("Asset not found or inactive", 404);
-        }
+        if (!asset) throw new AppError("Asset not found or inactive", 404);
+        assertEpcMutableAsset(asset);
 
         const duplicateAssetEpc = await prisma.assetEpc.findFirst({
             where: { 
@@ -237,11 +255,13 @@ export async function deleteAssetEpc(id: number) {
 
     const existingAssetEpc = await prisma.assetEpc.findUnique({
         where: { id },
+        include: { asset: true },
     });
 
     if (!existingAssetEpc) {
         throw new AppError("Asset EPC not found", 404);
     }
+    assertEpcMutableAsset(existingAssetEpc.asset);
 
     const assetEpc = await prisma.assetEpc.update({
         where: { id },
@@ -255,4 +275,52 @@ export async function deleteAssetEpc(id: number) {
     });
     
     return assetEpc;
+}
+
+export async function assignOrReplaceAssetEpc(assetId: number, input: ManageAssetEpcInput) {
+    if (!Number.isInteger(assetId) || assetId <= 0) throw new AppError("Invalid Asset ID", 400);
+    const manualEpc = input.epcCode ? validateNewEpcCode(input.epcCode) : null;
+    if (manualEpc && input.autoGenerateEpc) throw new AppError("Choose Auto Generate EPC or Manual EPC Entry, not both", 400);
+    if (!manualEpc && input.autoGenerateEpc !== true) throw new AppError("Choose Auto Generate EPC or provide a manual EPC", 400);
+
+    const attempts = input.autoGenerateEpc ? 5 : 1;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+        const epcCode = manualEpc || generateEpcCode();
+        try {
+            return await prisma.$transaction(async (tx) => {
+                const asset = await tx.asset.findUnique({ where: { id: assetId }, include: { epc: true } });
+                if (!asset) throw new AppError("Asset not found", 404);
+                assertEpcMutableAsset(asset);
+                if (asset.epc?.isActive && asset.epc.status === EpcStatus.ACTIVE && asset.epc.epcCode === epcCode) {
+                    throw new AppError("Replacement EPC must differ from the current active EPC", 400);
+                }
+                const duplicate = await tx.assetEpc.findUnique({ where: { epcCode } });
+                if (duplicate && duplicate.assetId !== assetId) throw new AppError("EPC code already exists", 409);
+
+                const data = {
+                    epcCode,
+                    status: EpcStatus.ACTIVE,
+                    isActive: true,
+                    assignedAt: new Date(),
+                    unassignedAt: null,
+                    remarks: input.remarks?.trim() || null,
+                };
+                return asset.epc
+                    ? tx.assetEpc.update({ where: { id: asset.epc.id }, data, select: ASSET_EPC_SELECT })
+                    : tx.assetEpc.create({ data: { ...data, assetId }, select: ASSET_EPC_SELECT });
+            }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+        } catch (error) {
+            if (error instanceof AppError) throw error;
+            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+                const generatedCodeCollision = input.autoGenerateEpc ? await prisma.assetEpc.findUnique({ where: { epcCode } }) : null;
+                if (generatedCodeCollision && attempt < attempts - 1) continue;
+                throw new AppError("EPC code already exists", 409);
+            }
+            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+                throw new AppError("EPC assignment conflicted with another action; refresh and try again", 409);
+            }
+            throw error;
+        }
+    }
+    throw new AppError("Could not generate a unique EPC; try again", 409);
 }

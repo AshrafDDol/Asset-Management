@@ -225,10 +225,10 @@ export async function updateUser(id: number, input: UpdateUserInput) {
     where: { id },
     data: {
       username,
-      fullName: input.fullname?.trim(),
+      fullName: input.fullName?.trim(),
       email,
       passwordHash,
-      roleId: input.roleId ? parseInt(input.roleId) : undefined,
+      roleId: input.roleId ? Number(input.roleId) : undefined,
       departmentId: input.departmentId,
       isActive: input.isActive,
     },

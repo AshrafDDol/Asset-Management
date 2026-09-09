@@ -1,14 +1,12 @@
 import { api } from './axios';
 import type { AssetCategory } from './assetCategories.api';
 import type { Location } from './locations.api';
-import type { BladeSku } from './bladeSkus.api';
 
 export type Asset = {
     id: number;
     assetCode: string;
     itemName: string;
     categoryId: number;
-    bladeSkuId?: number | null;
     locationId?: number | null;
     homeLocationId?: number | null;
     homeLocation?: Location | null;
@@ -28,7 +26,6 @@ export type Asset = {
 
     category?: AssetCategory;
     location?: Location;
-    bladeSku?: BladeSku | null;
     epc?: { id: number; epcCode: string; status: string; isActive: boolean } | null;
     locationPath?: string | null;
 };
@@ -37,7 +34,6 @@ export type CreateAssetPayload = {
     assetCode: string;
     itemName?: string;
     categoryId: number;
-    bladeSkuId?: number;
     epcCode?: string;
     autoGenerateEpc?: boolean;
     locationId: number;
@@ -57,14 +53,19 @@ export type UpdateAssetPayload = Partial<Omit<CreateAssetPayload, "epcCode">> & 
     isActive?: boolean;
 };
 
+export type AssetEpcResult = NonNullable<Asset["epc"]>;
+export type ManageAssetEpcPayload = { epcCode?: string; autoGenerateEpc?: boolean; remarks?: string };
+
 function unwrapData<T>(response: unknown): T {
     const value = response as { data?: { data?: T } | T };
     if (value.data && typeof value.data === "object" && "data" in value.data) return value.data.data as T;
     return (value.data ?? response) as T;
 }
 
-export async function getAssetsApi(): Promise<Asset[]> {
-    const response = await api.get('/assets');
+export type AssetFilters = Partial<{ assetCode: string; itemName: string; categoryId: number; locationId: number; homeLocationId: number; epc: string; condition: string; status: string; measurementHeight: number; measurementWidth: number }>;
+
+export async function getAssetsApi(filters: AssetFilters = {}): Promise<Asset[]> {
+    const response = await api.get('/assets', { params: filters });
     return unwrapData<Asset[]>(response);
 }
 
@@ -84,4 +85,14 @@ export async function updateAssetApi(
 ): Promise<Asset> {
     const response = await api.patch(`/assets/${id}`, payload);
     return unwrapData<Asset>(response);
+}
+
+export async function deleteAssetApi(id: number): Promise<Pick<Asset, "id" | "assetCode">> {
+    const response = await api.delete(`/assets/${id}`);
+    return unwrapData<Pick<Asset, "id" | "assetCode">>(response);
+}
+
+export async function assignOrReplaceAssetEpcApi(assetId: number, payload: ManageAssetEpcPayload): Promise<AssetEpcResult> {
+    const response = await api.post(`/asset-epcs/asset/${assetId}/assign-or-replace`, payload);
+    return unwrapData<AssetEpcResult>(response);
 }

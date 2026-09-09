@@ -25,8 +25,10 @@ export type CreateLocationPayload = {
     locationType?: string;
 };
 
-function unwrapData<T>(response: any): T {
-    return response?.data?.data ?? response?.data ?? response;
+function unwrapData<T>(response: unknown): T {
+    const value = response as { data?: { data?: T } | T };
+    if (value.data && typeof value.data === "object" && "data" in value.data) return value.data.data as T;
+    return (value.data ?? response) as T;
 }
 
 export async function getLocationsApi(): Promise<Location[]> {
@@ -41,5 +43,10 @@ export async function createLocationApi(payload: CreateLocationPayload) {
 
 export async function updateLocationApi(id: number, payload: Partial<CreateLocationPayload> & { isActive?: boolean }) {
     const response = await api.put(`/locations/${id}`, payload);
+    return unwrapData<Location>(response);
+}
+
+export async function deleteLocationApi(id: number) {
+    const response = await api.delete(`/locations/${id}`);
     return unwrapData<Location>(response);
 }

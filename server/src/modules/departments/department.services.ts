@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AppError } from "../../utils/AppError";
 import { CreateDepartmentInput, UpdateDepartmentInput } from "./department.types";
@@ -119,12 +120,24 @@ export async function deleteDepartment(
         throw new AppError("Department not found", 404);
     }
 
-    const department = await prisma.department.update({
-        where: { id },
-        data: {
-            isActive: false,
-        },
-    });
-
-    return department;
+    try {
+        return await prisma.$transaction(async (tx) => {
+            const [locations, users, assignments, fromMovements, toMovements] = await Promise.all([
+                tx.location.count({ where: { departmentId: id } }),
+                tx.user.count({ where: { departmentId: id } }),
+                tx.assetAssignment.count({ where: { departmentId: id } }),
+                tx.assetMovement.count({ where: { fromDepartmentId: id } }),
+                tx.assetMovement.count({ where: { toDepartmentId: id } }),
+            ]);
+            if (locations || users || assignments || fromMovements || toMovements) {
+                throw new AppError("Cannot delete this Department because Locations, Users, or history records reference it.", 409);
+            }
+            return tx.department.delete({ where: { id } });
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+            throw new AppError("Cannot delete this Department because another record references it.", 409);
+        }
+        throw error;
+    }
 }

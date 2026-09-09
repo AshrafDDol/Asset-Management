@@ -19,6 +19,11 @@ const ASSET_MOVEMENT_SELECT = {
   remarks: true,
   createdAt: true,
   updatedAt: true,
+  issueBatchItem: {
+    select: {
+      issueBatch: { select: { jobNo: true } },
+    },
+  },
   asset: {
     select: {
       id: true,

@@ -13,7 +13,7 @@ export function Layout() {
                 <header className="main-header">
                     <div>
                         <h1>Evolve Inventory Management</h1>
-                        <p>Asset Tracking and Maintenance System</p>
+                        <p>Asset Tracking and Issue Management System</p>
                     </div>
 
                     <div className="header-user">

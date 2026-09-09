@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AppError } from "../../utils/AppError";
 import { CreateAssetCategoryInput, UpdateAssetCategoryInput } from "./assetCategories.types";
@@ -127,12 +128,17 @@ export async function deleteAssetCategory(id: number) {
         throw new AppError("Asset category not found", 404);
     }
 
-    const category = await prisma.assetCategory.update({
-        where: { id },
-        data: {
-            isActive: false,
-        },
-    });
-
-    return category;
+    try {
+        return await prisma.$transaction(async (tx) => {
+            if (await tx.asset.count({ where: { categoryId: id } })) {
+                throw new AppError("Cannot delete this Category because Assets are using it.", 409);
+            }
+            return tx.assetCategory.delete({ where: { id } });
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+            throw new AppError("Cannot delete this Category because another record references it.", 409);
+        }
+        throw error;
+    }
 }

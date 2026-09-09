@@ -1,7 +1,9 @@
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
-import { type User, createUserApi, getUsersApi, updateUserApi } from '../../api/users.api';
+import { type User, createUserApi, getUsersApi, updateUserApi, deactivateUserApi } from '../../api/users.api';
 import { type Role, getRolesApi } from '../../api/roles.api';
+import { type Department, getDepartmentsApi } from '../../api/departments.api';
+import { errorMessage } from '../../utils/errorMessage';
 
 type UserFormState = {
     username: string;
@@ -35,6 +37,8 @@ function validateForm(form: UserFormState, isEditing: boolean): string | null {
     if (!form.fullName.trim()) {
         return "Full name is required.";
     }
+    if (!form.email.trim()) return "Email is required.";
+    if (!form.roleId) return "Role is required.";
 
     return null;
 }
@@ -46,7 +50,7 @@ function buildUpdatePayload(form: UserFormState) {
         fullName: form.fullName.trim() || undefined,
         email: form.email.trim() || undefined,
         roleId: form.roleId ? Number(form.roleId) : undefined,
-        departmentId: form.departmentId ? Number(form.departmentId) : undefined,
+        departmentId: form.departmentId ? Number(form.departmentId) : null,
         isActive: form.isActive,
     };
 }
@@ -65,6 +69,7 @@ function buildCreatePayload(form: UserFormState) {
 export function useUserPagesFunction() {
     const [users, setUsers] = useState<User[]>([]);
     const [roles, setRoles] = useState<Role[]>([]);
+    const [departments, setDepartments] = useState<Department[]>([]);
     const [form, setForm] = useState<UserFormState>(initialForm);
 
     const [editingUserId, setEditingUserId] = useState<number | null>(null);
@@ -99,13 +104,10 @@ export function useUserPagesFunction() {
             setLoading(true);
             setError("");
 
-            await Promise.all([loadUsers(), loadRoles()]);
-        } catch (err: any) {
-            setError(
-                err?.response?.data?.message ||
-                    err?.message ||
-                    "Failed to load data users and roles."
-            );
+            const [, , departmentData] = await Promise.all([loadUsers(), loadRoles(), getDepartmentsApi()]);
+            setDepartments(Array.isArray(departmentData) ? departmentData : []);
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to load Users, Roles, and Departments."));
         } finally {
             setLoading(false);
         }
@@ -153,32 +155,50 @@ export function useUserPagesFunction() {
             setForm(initialForm);
             setEditingUserId(null);
             await loadUsers();
-        } catch  (err: any) {
-            setError(
-                err?.response?.data?.message ||
-                    err?.message ||
-                    "Failed to save user."
-            );
+            return true;
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to save User."));
         } finally {
             setSaving(false);
         }
+        return false;
+    }
+
+    async function handleDeactivateUser() {
+        if (!editingUserId) return false;
+        try {
+            setSaving(true); setError("");
+            await deactivateUserApi(editingUserId);
+            setEditingUserId(null); setForm(initialForm);
+            await loadUsers();
+            return true;
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to deactivate User."));
+            return false;
+        } finally { setSaving(false); }
     }
 
     useEffect(() => {
-        loadPageData();
+        // Initial API synchronization is intentionally owned by this effect.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        void loadPageData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     return {
         users,
         roles,
+        departments,
         form,
         loading,
         saving,
         error,
         isEditing,
+        editingUserId,
         handleEditUser,
         handleCancelEdit,
         handleSubmitUser,
+        handleDeactivateUser,
         updateForm,
         loadPageData,
     };

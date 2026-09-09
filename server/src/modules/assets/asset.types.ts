@@ -2,7 +2,6 @@ export type CreateAssetInput = {
     assetCode: string;
     itemName?: string;
     categoryId: number;
-    bladeSkuId?: number;
     locationId: number;
     epc?: string;
     epcCode?: string;
@@ -24,8 +23,14 @@ export type UpdateAssetInput = Partial<Omit<CreateAssetInput, "epc" | "epcCode" 
 };
 
 export type AssetFilters = {
-    bladeSkuId?: number;
     status?: string;
     locationId?: number;
     assetCode?: string;
+    itemName?: string;
+    categoryId?: number;
+    homeLocationId?: number;
+    epc?: string;
+    condition?: string;
+    measurementHeight?: number;
+    measurementWidth?: number;
 };

@@ -7,7 +7,6 @@ import {
     ShieldCheck,
     Package,
     UserRound,
-    Wrench,
     ClipboardList,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
@@ -18,10 +17,9 @@ const menuItems =[
     {label: "Departments", icon: Building2, path: "/departments"},
     {label: "Asset Categories", icon: Boxes, path: "/asset-categories"},
     {label: "Assets", icon: Package, path: "/assets"},
-    {label: "Asset Requests", icon: ClipboardList, path: "/asset-requests"},
+    {label: "Issue Batches", icon: ClipboardList, path: "/issue-batches"},
     {label: "Asset Movement History", icon: MoveRight, path: "/asset-movements"},
     {label: "Users", icon: UserRound, path: "/users"},
-    {label: "Repairs", icon: Wrench, path: "/repairs"},
     {label: "Roles", icon: ShieldCheck, path: "/roles"},
 ];
 

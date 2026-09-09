@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AppError } from "../../utils/AppError";
 import { CreateRoleInput, UpdateRoleInput } from "./role.types";
@@ -107,11 +108,17 @@ export async function deleteRole (id: number) {
         throw new AppError("Role not found", 404);
     }
 
-    const role = await prisma.role.update({
-        where: { id },
-        data: {
-            isActive: false,
-        },
-    });
-    return role;
+    try {
+        return await prisma.$transaction(async (tx) => {
+            if (await tx.user.count({ where: { roleId: id } })) {
+                throw new AppError("Cannot delete this Role because it is assigned to a User.", 409);
+            }
+            return tx.role.delete({ where: { id } });
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+            throw new AppError("Cannot delete this Role because another record references it.", 409);
+        }
+        throw error;
+    }
 }

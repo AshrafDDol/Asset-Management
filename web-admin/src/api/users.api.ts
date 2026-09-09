@@ -12,6 +12,7 @@ export type User = {
     createdAt?: string;
     updatedAt?: string;
     role?: Role | null;
+    department?: { id: number; departmentCode: string; name: string } | null;
 };
 
 export type CreateUserPayload = {
@@ -20,7 +21,7 @@ export type CreateUserPayload = {
     fullName: string;
     email?: string;
     roleId?: number;
-    departmentId?: number;
+    departmentId?: number | null;
 };
 
 export type UpdateUserPayload = {
@@ -29,13 +30,15 @@ export type UpdateUserPayload = {
     fullName?: string;
     email?: string;
     roleId?: number;
-    departmentId?: number;
+    departmentId?: number | null;
     isActive?: boolean;
 };
 
 
-function unwrapData<T>(response: any): T {
-    return response?.data?.data || response?.data || response;
+function unwrapData<T>(response: unknown): T {
+    const value = response as { data?: { data?: T } | T };
+    if (value.data && typeof value.data === "object" && "data" in value.data) return value.data.data as T;
+    return (value.data ?? response) as T;
 }
 
 export async function getUsersApi(): Promise<User[]> {
@@ -58,5 +61,10 @@ export async function updateUserApi(
     payload: UpdateUserPayload,
 ): Promise<User> {
     const response = await api.patch(`/users/${id}`, payload);
+    return unwrapData<User>(response);
+}
+
+export async function deactivateUserApi(id: number): Promise<User> {
+    const response = await api.delete(`/users/${id}`);
     return unwrapData<User>(response);
 }

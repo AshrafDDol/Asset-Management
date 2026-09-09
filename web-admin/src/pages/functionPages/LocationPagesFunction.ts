@@ -1,7 +1,8 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
-import { getLocationsApi, createLocationApi, updateLocationApi, type Location } from "../../api/locations.api";
+import { getLocationsApi, createLocationApi, updateLocationApi, deleteLocationApi, type Location } from "../../api/locations.api";
 import { getDepartmentsApi, type Department } from "../../api/departments.api";
+import { errorMessage } from "../../utils/errorMessage";
 
 export type LocationFormState = {
     locationCode: string;
@@ -74,12 +75,8 @@ export function useLocationPagesFunction() {
             const [data, departmentData] = await Promise.all([getLocationsApi(), getDepartmentsApi()]);
             setLocations(Array.isArray(data) ? data : []);
             setDepartments(Array.isArray(departmentData) ? departmentData : []);
-        } catch (err: any) {
-            setError(
-                err?.response?.data?.message || 
-                    err?.message ||
-                    "Failed to load locations."
-            );
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to load locations."));
         } finally {
             setLoading(false);
         }
@@ -108,19 +105,33 @@ export function useLocationPagesFunction() {
             setForm(initialForm);
             setEditingId(null);
             await loadLocations();
-        } catch (err: any) {
-            setError(
-                err?.response?.data?.message ||
-                    err?.message ||
-                    "Failed to create location."
-            );
+            return true;
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to save location."));
         } finally {
             setSaving(false);
         }
+        return false;
+    }
+
+    async function handleDeleteLocation() {
+        if (!editingId) return false;
+        try {
+            setSaving(true); setError("");
+            await deleteLocationApi(editingId);
+            setForm(initialForm); setEditingId(null);
+            await loadLocations();
+            return true;
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to delete location."));
+            return false;
+        } finally { setSaving(false); }
     }
 
     useEffect(() => {
-        loadLocations();
+        // Initial API synchronization is intentionally owned by this effect.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        void loadLocations();
     }, []);
 
     return {
@@ -147,5 +158,6 @@ export function useLocationPagesFunction() {
             });
         },
         handleCancelEdit: () => { setEditingId(null); setForm(initialForm); setError(""); },
+        handleDeleteLocation,
     };
 }

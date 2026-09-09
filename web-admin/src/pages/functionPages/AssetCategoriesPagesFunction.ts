@@ -1,18 +1,21 @@
 import type { FormEvent} from 'react';
 import { useEffect, useState } from 'react';
-import { type AssetCategory, createAssetCategoryApi, getAssetCategoriesApi } from '../../api/assetCategories.api';
+import { type AssetCategory, createAssetCategoryApi, getAssetCategoriesApi, updateAssetCategoryApi, deleteAssetCategoryApi } from '../../api/assetCategories.api';
+import { errorMessage } from '../../utils/errorMessage';
 
 
 type AssetCategoryFormState = {
     categoryCode: string;
     name: string;
     description: string;
+    isActive: boolean;
 };
 
 const initialForm: AssetCategoryFormState = {
     categoryCode: "",
     name: "",
     description: "",
+    isActive: true,
 };
 
 function validateForm(form: AssetCategoryFormState): string | null {
@@ -32,12 +35,14 @@ function buildCreatePayload(form: AssetCategoryFormState) {
         categoryCode: form.categoryCode.trim(),
         name: form.name.trim(),
         description: form.description.trim() || undefined,
+        isActive: form.isActive,
     };
 }
 
 export function useAssetCategoriesPagesFunction() {
     const [assetCategories, setAssetCategories] = useState<AssetCategory[]>([]);
     const [form, setForm] = useState<AssetCategoryFormState>(initialForm);
+    const [editingId, setEditingId] = useState<number | null>(null);
 
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -60,18 +65,14 @@ export function useAssetCategoriesPagesFunction() {
 
             const data = await getAssetCategoriesApi();
             setAssetCategories(Array.isArray(data) ? data : []);
-        } catch (err: any) {
-            setError(
-                err?.response?.data?.message ||
-                    err?.message ||
-                    "Failed to load asset categories."
-            )
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to load Asset categories."));
         } finally {
             setLoading(false);
         }
     }
 
-    async function handleCreateAssetCategory(event: FormEvent) {
+    async function handleSubmitAssetCategory(event: FormEvent) {
         event.preventDefault();
 
         const validationError = validateForm(form);
@@ -85,23 +86,39 @@ export function useAssetCategoriesPagesFunction() {
             setSaving(true);
             setError("");
 
-            await createAssetCategoryApi(buildCreatePayload(form));
+            if (editingId) await updateAssetCategoryApi(editingId, buildCreatePayload(form));
+            else await createAssetCategoryApi(buildCreatePayload(form));
 
             setForm(initialForm);
+            setEditingId(null);
             await loadAssetCategories();
-        } catch (err: any) {
-            setError(
-                err?.response?.data?.message ||
-                    err?.message ||
-                    "Failed to create asset category."
-            );
+            return true;
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to save Asset category."));
         } finally {
             setSaving(false);
         }
+        return false;
+    }
+
+    async function handleDeleteAssetCategory() {
+        if (!editingId) return false;
+        try {
+            setSaving(true); setError("");
+            await deleteAssetCategoryApi(editingId);
+            setEditingId(null); setForm(initialForm);
+            await loadAssetCategories();
+            return true;
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to delete category."));
+            return false;
+        } finally { setSaving(false); }
     }
 
     useEffect(() => {
-        loadAssetCategories();
+        // Initial API synchronization is intentionally owned by this effect.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        void loadAssetCategories();
     }, []);
 
     return {
@@ -111,7 +128,15 @@ export function useAssetCategoriesPagesFunction() {
         saving,
         error,
         updateForm,
-        handleCreateAssetCategory,
+        editingId,
+        handleSubmitAssetCategory,
+        handleEditAssetCategory: (category: AssetCategory) => {
+            setEditingId(category.id);
+            setForm({ categoryCode: category.categoryCode, name: category.name, description: category.description || "", isActive: category.isActive !== false });
+            setError("");
+        },
+        handleCancelEdit: () => { setEditingId(null); setForm(initialForm); setError(""); },
+        handleDeleteAssetCategory,
         loadAssetCategories,
     }
 }

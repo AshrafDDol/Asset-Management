@@ -9,10 +9,10 @@ export type CreateUserInput = {
 
 export type UpdateUserInput = {
     username?: string;
-    fullname?: string;
+    fullName?: string;
     email?: string;
     password?: string;
-    roleId?: string;
+    roleId?: string | number;
     departmentId?: number | null;
     isActive?: boolean;
 };

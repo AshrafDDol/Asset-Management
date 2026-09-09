@@ -20,8 +20,10 @@ export type UpdateRolePayload = {
     isActive?: boolean;
 };
 
-function unwrapData<T>(response: any): T {
-    return response?.data?.data || response?.data || response;
+function unwrapData<T>(response: unknown): T {
+    const value = response as { data?: { data?: T } | T };
+    if (value.data && typeof value.data === "object" && "data" in value.data) return value.data.data as T;
+    return (value.data ?? response) as T;
 }
 
 export async function getRolesApi(): Promise<Role[]> {
@@ -39,5 +41,10 @@ export async function updateRoleApi(
     payload: UpdateRolePayload,
 ): Promise<Role> {
     const response = await api.put(`/roles/${id}`, payload);
+    return unwrapData<Role>(response);
+}
+
+export async function deleteRoleApi(id: number): Promise<Role> {
+    const response = await api.delete(`/roles/${id}`);
     return unwrapData<Role>(response);
 }

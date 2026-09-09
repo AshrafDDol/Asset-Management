@@ -1,17 +1,20 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
-import { getDepartmentsApi, createDepartmentApi, type Department } from "../../api/departments.api";
+import { getDepartmentsApi, createDepartmentApi, updateDepartmentApi, deleteDepartmentApi, type Department } from "../../api/departments.api";
+import { errorMessage } from "../../utils/errorMessage";
 
 type DepartmentFormState = {
     departmentCode: string;
     name: string;
     description: string;
+    isActive: boolean;
 };
 
 const initialForm: DepartmentFormState = {
     departmentCode: "",
     name: "",
-    description: ""
+    description: "",
+    isActive: true,
 };
 
 function validateForm (form: DepartmentFormState): string | null {
@@ -31,12 +34,14 @@ function buildCreatePayload(form: DepartmentFormState) {
         departmentCode: form.departmentCode.trim(),
         name: form.name.trim(),
         description: form.description.trim() || undefined,
+        isActive: form.isActive,
     };
 }
 
 export function useDepartmentPagesFunction() {
     const [departments, setDepartments] = useState<Department[]>([]);
     const [form, setForm] = useState<DepartmentFormState>(initialForm);
+    const [editingId, setEditingId] = useState<number | null>(null);
 
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -59,22 +64,20 @@ export function useDepartmentPagesFunction() {
 
             const data = await getDepartmentsApi();
             setDepartments(Array.isArray(data) ? data : []);
-        } catch (err: any) {
-            setError(
-                err?.response?.data?.message ||
-                    err?.message ||
-                    "Failed to load departments."
-            );
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to load departments."));
         } finally {
             setLoading(false);
         }
     }
 
     useEffect(() => {
-        loadDepartments();
+        // Initial API synchronization is intentionally owned by this effect.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        void loadDepartments();
     }, []);
 
-    async function handleCreateDepartment(event: FormEvent) {
+    async function handleSubmitDepartment(event: FormEvent) {
         event.preventDefault();
 
         const validationError = validateForm(form);
@@ -88,19 +91,33 @@ export function useDepartmentPagesFunction() {
             setSaving(true);
             setError("");
 
-            await createDepartmentApi(buildCreatePayload(form));
+            if (editingId) await updateDepartmentApi(editingId, buildCreatePayload(form));
+            else await createDepartmentApi(buildCreatePayload(form));
 
             setForm(initialForm);
+            setEditingId(null);
             await loadDepartments();
-        } catch (err: any) {
-            setError(
-                err?.response?.data?.message ||
-                    err?.message ||
-                    "Failed to create department."
-            );
+            return true;
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to save department."));
         } finally {
             setSaving(false);
         }
+        return false;
+    }
+
+    async function handleDeleteDepartment() {
+        if (!editingId) return false;
+        try {
+            setSaving(true); setError("");
+            await deleteDepartmentApi(editingId);
+            setEditingId(null); setForm(initialForm);
+            await loadDepartments();
+            return true;
+        } catch (err: unknown) {
+            setError(errorMessage(err, "Failed to delete department."));
+            return false;
+        } finally { setSaving(false); }
     }
 
     return {
@@ -110,7 +127,15 @@ export function useDepartmentPagesFunction() {
         saving,
         error,
         updateForm,
-        handleCreateDepartment,
+        editingId,
+        handleSubmitDepartment,
+        handleEditDepartment: (department: Department) => {
+            setEditingId(department.id);
+            setForm({ departmentCode: department.departmentCode, name: department.name, description: department.description || "", isActive: department.isActive !== false });
+            setError("");
+        },
+        handleCancelEdit: () => { setEditingId(null); setForm(initialForm); setError(""); },
+        handleDeleteDepartment,
         loadDepartments,
     }
 }

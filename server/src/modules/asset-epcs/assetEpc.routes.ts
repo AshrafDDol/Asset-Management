@@ -7,6 +7,7 @@ import {
   getAssetEpcByIdController,
   getAssetEpcsController,
   updateAssetEpcController,
+  assignOrReplaceAssetEpcController,
 } from "./assetEpc.controller";
 
 const router = Router();
@@ -14,6 +15,7 @@ const router = Router();
 router.use(authMiddleware);
 
 router.get("/", getAssetEpcsController);
+router.post("/asset/:assetId/assign-or-replace", assignOrReplaceAssetEpcController);
 router.get("/by-epc/:epcCode", getAssetEpcByCodeController);
 router.get("/:id", getAssetEpcByIdController);
 router.post("/", createAssetEpcController);

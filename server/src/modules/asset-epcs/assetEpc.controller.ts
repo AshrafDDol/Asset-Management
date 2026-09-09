@@ -7,6 +7,7 @@ import {
   getAssetEpcByCode,
   getAssetEpcById,
   updateAssetEpc,
+  assignOrReplaceAssetEpc,
 } from "./assetEpc.services";
 
 export async function getAssetEpcsController(
@@ -102,6 +103,19 @@ export async function deleteAssetEpcController(
     const assetEpc = await deleteAssetEpc(id);
 
     return successResponse(res, "Asset EPC deactivated successfully", assetEpc);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function assignOrReplaceAssetEpcController(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const assetEpc = await assignOrReplaceAssetEpc(Number(req.params.assetId), req.body);
+    return successResponse(res, "Asset EPC assigned successfully", assetEpc);
   } catch (error) {
     next(error);
   }

@@ -31,10 +31,6 @@ export function DashboardPage() {
                     <p>Manage company assets movements</p>
                 </div>
 
-                <div className="dashboard-card">
-                    <h2>Repairs</h2>
-                    <p>Manage asset repairs</p>
-                </div>
             </div>
         </div>
     );
