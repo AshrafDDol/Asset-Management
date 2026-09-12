@@ -10,6 +10,10 @@ type AssetFormState = {
     categoryId: string;
     measurementHeight: string;
     measurementWidth: string;
+    gridUp: string;
+    radius: string;
+    gapMm: string;
+    registerEpc: boolean;
     epcCode: string;
     autoGenerateEpc: boolean;
     locationId: string;
@@ -30,6 +34,10 @@ const initialForm: AssetFormState = {
     categoryId: "",
     measurementHeight: "",
     measurementWidth: "",
+    gridUp: "",
+    radius: "",
+    gapMm: "",
+    registerEpc: false,
     epcCode: "",
     autoGenerateEpc: true,
     locationId: "",
@@ -68,8 +76,11 @@ function buildCreatePayload(form: AssetFormState) {
         categoryId: Number(form.categoryId),
         measurementHeight: form.measurementHeight ? Number(form.measurementHeight) : null,
         measurementWidth: form.measurementWidth ? Number(form.measurementWidth) : null,
-        epcCode: form.autoGenerateEpc ? undefined : form.epcCode.trim() || undefined,
-        autoGenerateEpc: form.autoGenerateEpc,
+        gridUp: form.gridUp ? Number(form.gridUp) : null,
+        radius: form.radius ? Number(form.radius) : null,
+        gapMm: form.gapMm ? Number(form.gapMm) : null,
+        epcCode: form.registerEpc && !form.autoGenerateEpc ? form.epcCode.trim() || undefined : undefined,
+        autoGenerateEpc: form.registerEpc && form.autoGenerateEpc,
         locationId: Number(form.locationId),
         serialNumber: form.serialNumber.trim() || undefined,
         brand: form.brand.trim() || undefined,
@@ -155,6 +166,10 @@ export function useAssetsPagesFunction() {
             categoryId: String(asset.categoryId),
             measurementHeight: asset.measurementHeight == null ? "" : String(asset.measurementHeight),
             measurementWidth: asset.measurementWidth == null ? "" : String(asset.measurementWidth),
+            gridUp: asset.gridUp == null ? "" : String(asset.gridUp),
+            radius: asset.radius == null ? "" : String(asset.radius),
+            gapMm: asset.gapMm == null ? "" : String(asset.gapMm),
+            registerEpc: false,
             epcCode: "",
             autoGenerateEpc: true,
             locationId: asset.locationId ? String(asset.locationId) : "",

@@ -21,6 +21,12 @@ export async function getAssetsController (
             if (!Number.isFinite(parsed) || parsed <= 0) throw new AppError(`${name} must be greater than zero`, 400);
             return parsed;
         };
+        const parseNonNegative = (value: unknown, name: string) => {
+            if (value === undefined) return undefined;
+            const parsed = Number(value);
+            if (!Number.isFinite(parsed) || parsed < 0) throw new AppError(`${name} must be zero or greater`, 400);
+            return parsed;
+        };
         const assets = await getAllAssets({
             locationId: parseId(req.query.locationId, "locationId"),
             status: typeof req.query.status === "string" ? req.query.status : undefined,
@@ -32,6 +38,9 @@ export async function getAssetsController (
             condition: typeof req.query.condition === "string" ? req.query.condition : undefined,
             measurementHeight: parseMeasurement(req.query.measurementHeight, "measurementHeight"),
             measurementWidth: parseMeasurement(req.query.measurementWidth, "measurementWidth"),
+            gridUp: parseId(req.query.gridUp, "gridUp"),
+            radius: parseNonNegative(req.query.radius, "radius"),
+            gapMm: parseNonNegative(req.query.gapMm, "gapMm"),
         });
 
         return successResponse (

@@ -15,6 +15,9 @@ export type Asset = {
     model?: string;
     measurementHeight?: string | number | null;
     measurementWidth?: string | number | null;
+    gridUp?: string | number | null;
+    radius?: string | number | null;
+    gapMm?: string | number | null;
     purchaseDate?: string | null;
     purchaseCost?: number | null;
     status?: string;
@@ -45,6 +48,9 @@ export type CreateAssetPayload = {
     condition?: string;
     measurementHeight?: number | null;
     measurementWidth?: number | null;
+    gridUp?: number | null;
+    radius?: number | null;
+    gapMm?: number | null;
     remarks?: string;
 };
 
@@ -62,7 +68,7 @@ function unwrapData<T>(response: unknown): T {
     return (value.data ?? response) as T;
 }
 
-export type AssetFilters = Partial<{ assetCode: string; itemName: string; categoryId: number; locationId: number; homeLocationId: number; epc: string; condition: string; status: string; measurementHeight: number; measurementWidth: number }>;
+export type AssetFilters = Partial<{ assetCode: string; itemName: string; categoryId: number; locationId: number; homeLocationId: number; epc: string; condition: string; status: string; measurementHeight: number; measurementWidth: number; gridUp: number; radius: number; gapMm: number }>;
 
 export async function getAssetsApi(filters: AssetFilters = {}): Promise<Asset[]> {
     const response = await api.get('/assets', { params: filters });

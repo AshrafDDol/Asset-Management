@@ -252,6 +252,9 @@ model Asset {
   model             String?
   measurementHeight Decimal?       @map("measurement_height") @db.Decimal(10, 2)
   measurementWidth  Decimal?       @map("measurement_width") @db.Decimal(10, 2)
+  gridUp            Int?           @map("grid_up")
+  radius            Decimal?       @db.Decimal(10, 2)
+  gapMm             Decimal?       @map("gap_mm") @db.Decimal(10, 2)
   purchaseDate      DateTime?      @map("purchase_date") @db.Date
   purchaseCost      Decimal?       @map("purchase_cost") @db.Decimal(12, 2)
   status            AssetStatus    @default(AVAILABLE)

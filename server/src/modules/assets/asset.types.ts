@@ -14,6 +14,9 @@ export type CreateAssetInput = {
     condition?: string;
     measurementHeight?: number | string | null;
     measurementWidth?: number | string | null;
+    gridUp?: number | string | null;
+    radius?: number | string | null;
+    gapMm?: number | string | null;
     remarks?: string;
 };
 
@@ -33,4 +36,7 @@ export type AssetFilters = {
     condition?: string;
     measurementHeight?: number;
     measurementWidth?: number;
+    gridUp?: number;
+    radius?: number;
+    gapMm?: number;
 };

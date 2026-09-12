@@ -18,6 +18,9 @@ const ASSET_SELECT = {
   model: true,
   measurementHeight: true,
   measurementWidth: true,
+  gridUp: true,
+  radius: true,
+  gapMm: true,
   purchaseDate: true,
   purchaseCost: true,
   status: true,
@@ -67,6 +70,22 @@ function optionalMeasurement(value: number | string | null | undefined, fieldNam
   return new Prisma.Decimal(parsed.toFixed(2));
 }
 
+function optionalNonNegativeDecimal(value: number | string | null | undefined, fieldName: string) {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new AppError(`${fieldName} must be zero or greater`, 400);
+  return new Prisma.Decimal(parsed.toFixed(2));
+}
+
+function optionalPositiveInteger(value: number | string | null | undefined, fieldName: string) {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) throw new AppError(`${fieldName} must be a positive integer`, 400);
+  return parsed;
+}
+
 async function validateOptionalLocation(locationId?: number, requireLocation = false) {
   if (requireLocation && !locationId) throw new AppError("Active location is required", 400);
   if (locationId) {
@@ -103,6 +122,9 @@ export async function getAllAssets(filters: AssetFilters = {}) {
       itemName: filters.itemName ? { contains: filters.itemName.trim() } : undefined,
       measurementHeight: filters.measurementHeight === undefined ? undefined : new Prisma.Decimal(filters.measurementHeight),
       measurementWidth: filters.measurementWidth === undefined ? undefined : new Prisma.Decimal(filters.measurementWidth),
+      gridUp: filters.gridUp,
+      radius: filters.radius === undefined ? undefined : new Prisma.Decimal(filters.radius),
+      gapMm: filters.gapMm === undefined ? undefined : new Prisma.Decimal(filters.gapMm),
       epc: filters.epc ? { epcCode: { contains: filters.epc.trim().toUpperCase() } } : undefined,
     },
     select: ASSET_SELECT,
@@ -154,6 +176,9 @@ export async function createAsset(input: CreateAssetInput) {
             model: input.model?.trim() || null,
             measurementHeight: optionalMeasurement(input.measurementHeight, "Measurement height"),
             measurementWidth: optionalMeasurement(input.measurementWidth, "Measurement width"),
+            gridUp: optionalPositiveInteger(input.gridUp, "Grid / Up"),
+            radius: optionalNonNegativeDecimal(input.radius, "Radius"),
+            gapMm: optionalNonNegativeDecimal(input.gapMm, "Gap"),
             purchaseDate: parsePurchaseDate(input.purchaseDate),
             purchaseCost: input.purchaseCost,
             status: AssetStatus.AVAILABLE,
@@ -225,6 +250,9 @@ export async function updateAsset(id: number, input: UpdateAssetInput) {
       model: input.model?.trim(),
       measurementHeight: optionalMeasurement(input.measurementHeight, "Measurement height"),
       measurementWidth: optionalMeasurement(input.measurementWidth, "Measurement width"),
+      gridUp: optionalPositiveInteger(input.gridUp, "Grid / Up"),
+      radius: optionalNonNegativeDecimal(input.radius, "Radius"),
+      gapMm: optionalNonNegativeDecimal(input.gapMm, "Gap"),
       purchaseDate: parsePurchaseDate(input.purchaseDate),
       purchaseCost: input.purchaseCost,
       condition: validateCondition(input.condition),
