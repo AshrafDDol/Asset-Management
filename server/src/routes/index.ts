@@ -10,6 +10,7 @@ import assetEpcRoutes from "../modules/asset-epcs/assetEpc.routes";
 import assetAssignmentRoutes from "../modules/asset-assignments/assetAssignment.routes";
 import assetMovementRoutes from "../modules/asset-movements/assetMovement.routes";
 import issueBatchRoutes from "../modules/issue-batches/issueBatch.routes";
+import handheldWorkRoutes from "../modules/handheld-work/handheldWork.routes";
 
 const router = Router();
 
@@ -32,5 +33,6 @@ router.use("/asset-epcs", assetEpcRoutes);
 router.use("/asset-assignments", assetAssignmentRoutes);
 router.use("/asset-movements", assetMovementRoutes);
 router.use("/issue-batches", issueBatchRoutes);
+router.use("/handheld-work", handheldWorkRoutes);
 
 export default router;

@@ -16,10 +16,12 @@ export function successResponse<T>(
 export function errorResponse(
     res: Response,
     message: string,
-    statusCode = 500
+    statusCode = 500,
+    status?: string
 ) {
     return res.status(statusCode).json({
         success: false,
+        ...(status ? { status } : {}),
         message,
     });
 }

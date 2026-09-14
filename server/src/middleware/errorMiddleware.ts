@@ -16,7 +16,7 @@ export function errorMiddleware(
     console.error("===============================");
 
     if (error instanceof AppError) {
-        return errorResponse(res, error.message, error.statusCode);
+        return errorResponse(res, error.message, error.statusCode, error.code);
     }
 
     return errorResponse(res, "Internal Server Error", 500);

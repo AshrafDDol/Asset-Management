@@ -4,6 +4,6 @@
     "rootDir": ".",
     "outDir": "dist-runtime"
   },
-  "include": ["src", "scripts/asset-blade-details.runtime.ts", "scripts/issue-batch.runtime.ts", "scripts/master-data.runtime.ts", "scripts/scan-all-jobs.runtime.ts", "scripts/swap-asset.runtime.ts"],
+  "include": ["src", "scripts/asset-blade-details.runtime.ts", "scripts/issue-batch.runtime.ts", "scripts/master-data.runtime.ts", "scripts/processing-handheld.runtime.ts", "scripts/repeated-lifecycle.runtime.ts", "scripts/return-handheld.runtime.ts", "scripts/scan-all-jobs.runtime.ts", "scripts/swap-asset.runtime.ts", "scripts/swap-handheld.runtime.ts"],
   "exclude": ["node_modules", "dist", "dist-runtime"]
 }

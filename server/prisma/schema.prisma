@@ -83,6 +83,12 @@ enum ConfirmationSource {
   HANDHELD
 }
 
+enum HandheldSwapTaskStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
 model Location {
   id                  Int               @id @default(autoincrement())
   locationCode        String            @unique @map("location_code")
@@ -176,6 +182,9 @@ model User {
   recipientBatchItems IssueBatchItem[]        @relation("IssueBatchItemRecipient")
   returnedAssignments AssetAssignment[]       @relation("AssignmentReturnedBy")
   scanConfirmations   AssetScanConfirmation[] @relation("ConfirmationConfirmedBy")
+  createdHandheldSwapTasks HandheldSwapTask[] @relation("HandheldSwapCreatedBy")
+  confirmedHandheldSwapTasks HandheldSwapTask[] @relation("HandheldSwapConfirmedBy")
+  cancelledHandheldSwapTasks HandheldSwapTask[] @relation("HandheldSwapCancelledBy")
 
   @@map("users")
 }
@@ -196,6 +205,7 @@ model IssueBatch {
   defaultToLocation Location?        @relation("IssueBatchDefaultLocation", fields: [defaultToLocationId], references: [id], onDelete: Restrict)
   createdBy         User             @relation("IssueBatchCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   items             IssueBatchItem[]
+  handheldSwapTasks HandheldSwapTask[]
 
   @@index([jobNo])
   @@index([status])
@@ -230,6 +240,7 @@ model IssueBatchItem {
   assignment        AssetAssignment?
   scanConfirmations AssetScanConfirmation[]
   movements         AssetMovement[]
+  handheldSwapTasks HandheldSwapTask[]
 
   @@index([issueBatchId, status])
   @@index([assetId, status])
@@ -271,11 +282,49 @@ model Asset {
   movements         AssetMovement[]
   issueBatchItems   IssueBatchItem[]
   scanConfirmations AssetScanConfirmation[]
+  handheldReplacementTasks HandheldSwapTask[]
 
   @@index([categoryId])
   @@index([locationId])
   @@index([homeLocationId])
   @@map("assets")
+}
+
+model HandheldSwapTask {
+  id                 Int                      @id @default(autoincrement())
+  issueBatchId       Int                      @map("issue_batch_id")
+  targetItemId       Int                      @map("target_item_id")
+  replacementAssetId Int                      @map("replacement_asset_id")
+  status             HandheldSwapTaskStatus   @default(PENDING)
+  remarks            String?
+  createdByUserId    Int                      @map("created_by_user_id")
+  confirmedByUserId  Int?                     @map("confirmed_by_user_id")
+  confirmedAt        DateTime?                @map("confirmed_at")
+  cancelledByUserId  Int?                     @map("cancelled_by_user_id")
+  cancelledAt        DateTime?                @map("cancelled_at")
+  cancellationReason String?                  @map("cancellation_reason")
+  oldVerifiedEpc     String?                  @map("old_verified_epc")
+  oldVerifiedAt      DateTime?                @map("old_verified_at")
+  oldVerifiedSource  ConfirmationSource?      @map("old_verified_source")
+  newVerifiedEpc     String?                  @map("new_verified_epc")
+  newVerifiedAt      DateTime?                @map("new_verified_at")
+  newVerifiedSource  ConfirmationSource?      @map("new_verified_source")
+  createdAt          DateTime                 @default(now()) @map("created_at")
+  updatedAt          DateTime                 @updatedAt @map("updated_at")
+
+  issueBatch       IssueBatch     @relation(fields: [issueBatchId], references: [id], onDelete: Restrict)
+  targetItem       IssueBatchItem @relation(fields: [targetItemId], references: [id], onDelete: Restrict)
+  replacementAsset Asset          @relation(fields: [replacementAssetId], references: [id], onDelete: Restrict)
+  createdBy        User           @relation("HandheldSwapCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  confirmedBy      User?          @relation("HandheldSwapConfirmedBy", fields: [confirmedByUserId], references: [id], onDelete: Restrict)
+  cancelledBy      User?          @relation("HandheldSwapCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@index([issueBatchId, status])
+  @@index([targetItemId, status])
+  @@index([replacementAssetId, status])
+  @@index([cancelledByUserId])
+  @@map("handheld_swap_tasks")
 }
 
 model AssetEpc {

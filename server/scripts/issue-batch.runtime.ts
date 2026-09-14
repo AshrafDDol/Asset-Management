@@ -113,8 +113,9 @@ async function main() {
   assert.deepEqual(returnRace.flatMap((result) => result.results.map((row) => row.classification)).sort(), ["ALREADY_RETURNED", "RETURNED"]);
   assert.equal(await prisma.assetMovement.count({ where: { issueBatchItemId: secondItem.id } }), movementBeforeReturnRace + 1);
   assert.equal(await prisma.assetScanConfirmation.count({ where: { issueBatchItemId: secondItem.id, confirmationType: "RETURN_CONFIRMATION" } }), auditBeforeReturnRace + 1);
-  assert.equal((await prisma.issueBatch.findUniqueOrThrow({ where: { id: batch.id } })).status, "COMPLETED");
-  await assert.rejects(() => addAssetsToIssueBatch(batch.id, { assetIds: [assets[4].id], jobNo: `JOB-${suffix}`, defaultRecipientUserId: user.id, defaultToLocationId: operationA.id }, user.id), /already completed/);
+  assert.equal((await prisma.issueBatch.findUniqueOrThrow({ where: { id: batch.id } })).status, "PROCESSING");
+  const reopened = await addAssetsToIssueBatch(batch.id, { assetIds: [assets[4].id], jobNo: `JOB-${suffix}`, defaultRecipientUserId: user.id, defaultToLocationId: operationA.id }, user.id);
+  assert.equal(reopened.id, batch.id); assert.equal(reopened.items.find((item) => item.assetId === assets[4].id)?.status, "ISSUED");
 
   const unresolvedBatch = await createIssueBatch({ assetIds: [assets[2].id], jobNo: `UNRESOLVED-${suffix}`, defaultRecipientUserId: user.id, defaultToLocationId: operationA.id }, user.id); batchIds.push(unresolvedBatch.id);
   await confirmBatchItemIssue(unresolvedBatch.items[0].id, assets[2].epc!.epcCode, undefined, user.id);

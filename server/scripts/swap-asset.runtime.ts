@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { prisma } from "../src/config/prisma";
 import { createAsset } from "../src/modules/assets/asset.service";
+import { confirmHandheldSwap, prepareHandheldSwap } from "../src/modules/handheld-work/handheldWork.services";
 import { confirmBatchItemIssue, createIssueBatch, swapIssueBatchAsset } from "../src/modules/issue-batches/issueBatch.services";
 
 const suffix = Date.now().toString();
-const assetIds: number[] = []; const batchIds: number[] = []; const locationIds: number[] = [];
+const assetIds: number[] = []; const batchIds: number[] = []; const locationIds: number[] = []; const taskIds: number[] = [];
 let categoryId = 0; let userId = 0;
 
 async function main() {
@@ -33,19 +34,20 @@ async function main() {
 
   const inUseBatch = await createIssueBatch({ assetIds: [assets[2].id], jobNo: `SWAP-INUSE-${suffix}`, defaultRecipientUserId: user.id, defaultToLocationId: operation.id }, user.id); batchIds.push(inUseBatch.id);
   const inUseOld = inUseBatch.items[0]; await confirmBatchItemIssue(inUseOld.id, assets[2].epc!.epcCode, undefined, user.id);
-  await assert.rejects(() => swapIssueBatchAsset(inUseBatch.id, { replacementAssetId: assets[3].id, targetItemId: inUseOld.id, epc: assets[3].epc!.epcCode }, user.id), /does not match/);
+  await assert.rejects(() => swapIssueBatchAsset(inUseBatch.id, { replacementAssetId: assets[3].id, targetItemId: inUseOld.id, epc: assets[2].epc!.epcCode }, user.id), /requires Handheld Swap/);
   assert.equal((await prisma.asset.findUniqueOrThrow({ where: { id: assets[2].id } })).status, "IN_USE");
   assert.equal((await prisma.asset.findUniqueOrThrow({ where: { id: assets[3].id } })).status, "AVAILABLE");
-  const inUseSwap = await swapIssueBatchAsset(inUseBatch.id, { replacementAssetId: assets[3].id, targetItemId: inUseOld.id, epc: assets[2].epc!.epcCode }, user.id);
+  const handheldTask = await prepareHandheldSwap({ issueBatchId: inUseBatch.id, targetItemId: inUseOld.id, replacementAssetId: assets[3].id }, user.id); taskIds.push(handheldTask.id);
+  await confirmHandheldSwap(handheldTask.id, { oldEpc: assets[2].epc!.epcCode, newEpc: assets[3].epc!.epcCode }, user.id);
+  const inUseSwap = await prisma.issueBatch.findUniqueOrThrow({ where: { id: inUseBatch.id }, include: { items: { include: { asset: true } } } });
   const inUseNew = inUseSwap.items.find((item) => item.assetId === assets[3].id)!;
   const returnedOld = await prisma.asset.findUniqueOrThrow({ where: { id: assets[2].id } }); assert.equal(returnedOld.status, "AVAILABLE"); assert.equal(returnedOld.locationId, home.id);
   assert.equal((await prisma.issueBatchItem.findUniqueOrThrow({ where: { id: inUseOld.id } })).status, "RETURNED");
   const oldAssignment = await prisma.assetAssignment.findUniqueOrThrow({ where: { issueBatchItemId: inUseOld.id } }); assert.equal(oldAssignment.status, "RETURNED"); assert.equal(oldAssignment.isActive, false); assert.ok(oldAssignment.returnedAt);
   assert.equal(await prisma.assetMovement.count({ where: { issueBatchItemId: inUseOld.id, reason: { startsWith: "SWAP RETURN" } } }), 1);
   assert.equal(await prisma.assetScanConfirmation.count({ where: { issueBatchItemId: inUseOld.id, confirmationType: "RETURN_CONFIRMATION" } }), 1);
-  assert.equal(inUseNew.status, "ISSUED"); assert.equal(inUseNew.asset.status, "PENDING_CONFIRMATION"); assert.equal(inUseNew.replacementForItemId, inUseOld.id);
+  assert.equal(inUseNew.status, "CONFIRMED"); assert.equal(inUseNew.asset.status, "IN_USE"); assert.equal(inUseNew.replacementForItemId, inUseOld.id);
   assert.equal(inUseSwap.status, "PROCESSING");
-  await confirmBatchItemIssue(inUseNew.id, assets[3].epc!.epcCode, undefined, user.id);
   assert.equal((await prisma.asset.findUniqueOrThrow({ where: { id: assets[3].id } })).status, "IN_USE");
   assert.equal(await prisma.assetMovement.count({ where: { issueBatchItemId: inUseNew.id } }), 1);
   assert.equal(await prisma.assetScanConfirmation.count({ where: { issueBatchItemId: inUseNew.id, confirmationType: "ISSUE_CONFIRMATION" } }), 1);
@@ -64,6 +66,7 @@ async function main() {
 
 main().finally(async () => {
   try {
+    if (taskIds.length) await prisma.handheldSwapTask.deleteMany({ where: { id: { in: taskIds } } });
     if (assetIds.length) { await prisma.assetScanConfirmation.deleteMany({ where: { assetId: { in: assetIds } } }); await prisma.assetMovement.deleteMany({ where: { assetId: { in: assetIds } } }); await prisma.assetAssignment.deleteMany({ where: { assetId: { in: assetIds } } }); }
     if (batchIds.length) { await prisma.issueBatchItem.updateMany({ where: { issueBatchId: { in: batchIds } }, data: { replacementForItemId: null } }); await prisma.issueBatchItem.deleteMany({ where: { issueBatchId: { in: batchIds } } }); await prisma.issueBatch.deleteMany({ where: { id: { in: batchIds } } }); }
     if (assetIds.length) { await prisma.assetEpc.deleteMany({ where: { assetId: { in: assetIds } } }); await prisma.asset.deleteMany({ where: { id: { in: assetIds } } }); }

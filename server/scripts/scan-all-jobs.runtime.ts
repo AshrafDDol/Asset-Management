@@ -29,7 +29,7 @@ async function main() {
   const completedBatch = await createIssueBatch({ assetIds: [assets[7].id], jobNo: "COMPLETED", defaultRecipientUserId: user.id, defaultToLocationId: operationA.id }, user.id); batchIds.push(completedBatch.id);
   await confirmBatchItemIssue(completedBatch.items[0].id, assets[7].epc!.epcCode, undefined, user.id);
   await returnScan({ epcs: [assets[7].epc!.epcCode] }, user.id);
-  assert.equal((await prisma.issueBatch.findUniqueOrThrow({ where: { id: completedBatch.id } })).status, "COMPLETED");
+  assert.equal((await prisma.issueBatch.findUniqueOrThrow({ where: { id: completedBatch.id } })).status, "PROCESSING");
 
   const movementBefore = await prisma.assetMovement.count({ where: { assetId: { in: assets.slice(0, 5).map((asset) => asset.id) } } });
   const auditBefore = await prisma.assetScanConfirmation.count({ where: { assetId: { in: assets.slice(0, 5).map((asset) => asset.id) }, confirmationType: "ISSUE_CONFIRMATION" } });

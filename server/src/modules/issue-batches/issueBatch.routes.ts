@@ -1,10 +1,13 @@
 import { Router } from "express";
 import { authMiddleware } from "../../middleware/authMiddleware";
-import { addAssets, cancelBatch, cancelIssue, compare, compareAllJobs, confirmIssue, create, get, list, scanReturn, swapAsset } from "./issueBatch.controller";
+import { addAssets, cancelBatch, cancelIssue, compare, compareAllJobs, confirmHandheld, confirmIssue, create, get, getHandheld, list, listHandheldPending, scanReturn, swapAsset } from "./issueBatch.controller";
 
 const router = Router();
 router.use(authMiddleware);
 router.get("/", list);
+router.get("/handheld/pending", listHandheldPending);
+router.get("/:id/handheld", getHandheld);
+router.post("/:id/handheld-confirm", confirmHandheld);
 router.get("/:id", get);
 router.post("/", create);
 router.post("/return-scan", scanReturn);
