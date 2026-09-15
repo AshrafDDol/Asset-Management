@@ -18,6 +18,7 @@ const menuItems =[
     {label: "Asset Categories", icon: Boxes, path: "/asset-categories"},
     {label: "Assets", icon: Package, path: "/assets"},
     {label: "Issue Batches", icon: ClipboardList, path: "/issue-batches"},
+    {label: "Stock Takes", icon: ClipboardList, path: "/stock-takes"},
     {label: "Asset Movement History", icon: MoveRight, path: "/asset-movements"},
     {label: "Users", icon: UserRound, path: "/users"},
     {label: "Roles", icon: ShieldCheck, path: "/roles"},

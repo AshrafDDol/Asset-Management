@@ -23,6 +23,7 @@ import { chronological, type ListOrder } from "../utils/listOrder";
 import { locationDisplayName } from "../utils/locationDisplay";
 import { AssetColumnSelector } from "../components/AssetColumnSelector";
 import { AssetDetailsModal } from "../components/AssetDetailsModal";
+import { cancelRepairTaskApi, getRepairsApi, prepareCompleteRepairApi, prepareStartRepairApi, type AssetRepair } from "../api/repairs.api";
 import {
   displayValue,
   formatBladeDetails,
@@ -800,6 +801,28 @@ function PrepareIssueDialog({
   );
 }
 
+function PrepareRepairDialog({ asset, repair, locations, close, complete }: { asset: Asset; repair?: AssetRepair; locations: Location[]; close: () => void; complete: () => Promise<void> }) {
+  const [reason, setReason] = useState(repair?.reason || "");
+  const [repairLocationId, setRepairLocationId] = useState(repair ? String(repair.repairLocationId) : "");
+  const [remarks, setRemarks] = useState(repair?.remarks || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const completing = asset.status === "UNDER_REPAIR";
+  async function submit(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setError("");
+    try {
+      if (completing) {
+        if (!repair) throw new Error("No in-progress Repair was found for this Asset.");
+        await prepareCompleteRepairApi(repair.id);
+      } else {
+        await prepareStartRepairApi({ assetId: asset.id, reason, repairLocationId: Number(repairLocationId), remarks: remarks || undefined });
+      }
+      await complete(); close();
+    } catch (caught) { setError(apiError(caught)); } finally { setBusy(false); }
+  }
+  return <div className="modal-backdrop" role="presentation"><form className="modal-card" onSubmit={submit} role="dialog" aria-modal="true"><div className="page-title-row"><div><h3>{completing ? "Prepare Complete Repair" : "Prepare Start Repair"}</h3><p>Preparation creates handheld work only and does not change the Asset.</p></div></div>{error && <div className="error-box">{error}</div>}<label className="form-field">Asset<input value={`${asset.assetCode} — ${asset.itemName}`} disabled /></label><label className="form-field">Reason<input required={!completing} disabled={completing} maxLength={191} value={reason} onChange={event => setReason(event.target.value)} /></label><label className="form-field">Repair Location<select required={!completing} disabled={completing} value={repairLocationId} onChange={event => setRepairLocationId(event.target.value)}><option value="">Select Repair Location</option>{locations.filter(location => location.isActive !== false).map(location => <option key={location.id} value={location.id}>{location.name} ({location.locationCode})</option>)}</select></label><label className="form-field">Remarks<input disabled={completing} maxLength={191} value={remarks} onChange={event => setRemarks(event.target.value)} placeholder="Optional" /></label><div className="form-actions"><button className="primary-button" disabled={busy}>{busy ? "Preparing..." : "Confirm"}</button><button className="secondary-button" type="button" disabled={busy} onClick={close}>Close</button></div></form></div>;
+}
+
 function AssetEpcDialog({
   asset,
   close,
@@ -830,7 +853,7 @@ function AssetEpcDialog({
     try {
       const result = await assignOrReplaceAssetEpcApi(asset.id, {
         autoGenerateEpc: autoGenerate,
-        epcCode: autoGenerate ? undefined : epcCode,
+        epcCode: autoGenerate ? undefined : epcCode.trim().toUpperCase(),
         remarks,
       });
       setSavedEpc(result.epcCode);
@@ -898,15 +921,15 @@ function AssetEpcDialog({
             autoFocus={!autoGenerate}
             disabled={autoGenerate || !!savedEpc}
             required={!autoGenerate}
-            minLength={24}
-            maxLength={24}
-            pattern="[0-9A-Fa-f]{24}"
+            minLength={2}
+            maxLength={191}
+            pattern="([0-9A-Fa-f]{2})+"
             value={epcCode}
             onChange={(event) => setEpcCode(event.target.value)}
             placeholder={
               autoGenerate
-                ? "24-character EPC generated after save"
-                : "Enter 24 hexadecimal characters"
+                ? "EPC generated after save"
+                : "Hexadecimal only, with an even number of characters"
             }
           />
         </label>
@@ -974,6 +997,9 @@ export function AssetsPages() {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [preparing, setPreparing] = useState(false);
+  const [repairAsset, setRepairAsset] = useState<Asset | null>(null);
+  const [repairs, setRepairs] = useState<AssetRepair[]>([]);
+  const [repairError, setRepairError] = useState("");
   const [filters, setFilters] = useState({
     assetCode: "",
     itemName: "",
@@ -1019,6 +1045,14 @@ export function AssetsPages() {
   );
   const selectedAssets = assets.filter((asset) => selected.has(asset.id));
   const editingAsset = assets.find((asset) => asset.id === editingAssetId);
+  const activeRepairByAsset = new Map(repairs.filter(repair => repair.status === "IN_PROGRESS").map(repair => [repair.asset.id, repair]));
+  const pendingRepairByAsset = new Map(repairs.flatMap(repair => repair.tasks.filter(task => task.status === "PENDING").map(task => [repair.asset.id, task] as const)));
+  const loadRepairs = async () => { try { setRepairError(""); setRepairs(await getRepairsApi()); } catch (caught) { setRepairError(apiError(caught)); } };
+  useEffect(() => {
+    // Asset master data uses mount-time loading.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadRepairs().catch(() => undefined);
+  }, []);
   const setFilter = (name: keyof typeof filters, value: string) =>
     setFilters((old) => ({ ...old, [name]: value }));
   const applyColumns = (next: AssetColumnId[]) => {
@@ -1089,7 +1123,7 @@ export function AssetsPages() {
         return displayValue(asset.purchaseCost);
       case "action":
         return (
-          <button
+          <div className="form-actions"><button
             className="table-button"
             type="button"
             onClick={() => {
@@ -1099,6 +1133,7 @@ export function AssetsPages() {
           >
             Edit
           </button>
+          {(asset.status === "AVAILABLE" || asset.status === "UNDER_REPAIR") && <button className="table-button" type="button" disabled={pendingRepairByAsset.has(asset.id)} onClick={() => setRepairAsset(asset)}>{pendingRepairByAsset.has(asset.id) ? "Repair Prepared" : asset.status === "UNDER_REPAIR" ? "Prepare Complete Repair" : "Prepare Repair"}</button>}</div>
         );
     }
   };
@@ -1120,19 +1155,21 @@ export function AssetsPages() {
           >
             + Register Asset
           </button>
-          <button className="secondary-button" onClick={loadPageData}>
+          <button className="secondary-button" onClick={() => Promise.all([loadPageData(), loadRepairs()])}>
             Refresh
           </button>
         </div>
       </div>
 
       {!assetFormOpen && error && <div className="error-box">{error}</div>}
+      {repairError && <div className="error-box">{repairError}</div>}
       {createdEpc && (
         <div className="success-box">
           Asset registered successfully. Generated EPC:{" "}
           <strong>{createdEpc}</strong>
         </div>
       )}
+      {repairs.some(repair => repair.tasks.some(task => task.status === "PENDING")) && <div className="form-panel"><strong>Pending Repair Actions</strong><table className="data-table"><thead><tr><th>Asset</th><th>Action</th><th>Repair Location</th><th>Reason</th><th></th></tr></thead><tbody>{repairs.flatMap(repair => repair.tasks.filter(task => task.status === "PENDING").map(task => <tr key={task.id}><td>{repair.asset.assetCode}</td><td>{task.action.replaceAll("_", " ")}</td><td>{repair.repairLocation.name}</td><td>{repair.reason}</td><td><button className="danger-button" onClick={async () => { try { await cancelRepairTaskApi(task.id); await loadRepairs(); } catch (caught) { setRepairError(apiError(caught)); } }}>Cancel</button></td></tr>))}</tbody></table></div>}
 
       <div className="form-panel asset-search-panel">
         <strong>Operational Asset Search</strong>
@@ -1678,14 +1715,14 @@ export function AssetsPages() {
                             <label>EPC *</label>
                             <input
                               required
-                              minLength={24}
-                              maxLength={24}
-                              pattern="[0-9A-Fa-f]{24}"
+                              minLength={2}
+                              maxLength={191}
+                              pattern="([0-9A-Fa-f]{2})+"
                               value={form.epcCode}
                               onChange={(event) =>
                                 updateForm("epcCode", event.target.value)
                               }
-                              placeholder="Enter 24 hexadecimal characters"
+                              placeholder="Enter an even number of hexadecimal characters"
                             />
                           </div>
                         )}
@@ -1776,6 +1813,7 @@ export function AssetsPages() {
           </div>
         </div>
       )}
+      {repairAsset && <PrepareRepairDialog asset={repairAsset} repair={activeRepairByAsset.get(repairAsset.id)} locations={locations} close={() => setRepairAsset(null)} complete={async () => { await Promise.all([loadPageData(), loadRepairs()]); }} />}
       {confirmingDelete && editingAsset && (
         <ConfirmDeleteDialog
           title="Delete Asset?"

@@ -79,7 +79,7 @@ function buildCreatePayload(form: AssetFormState) {
         gridUp: form.gridUp ? Number(form.gridUp) : null,
         radius: form.radius ? Number(form.radius) : null,
         gapMm: form.gapMm ? Number(form.gapMm) : null,
-        epcCode: form.registerEpc && !form.autoGenerateEpc ? form.epcCode.trim() || undefined : undefined,
+        epcCode: form.registerEpc && !form.autoGenerateEpc ? form.epcCode.trim().toUpperCase() || undefined : undefined,
         autoGenerateEpc: form.registerEpc && form.autoGenerateEpc,
         locationId: Number(form.locationId),
         serialNumber: form.serialNumber.trim() || undefined,

@@ -4,7 +4,7 @@ import { randomBytes } from "crypto";
 import { AppError } from "../../utils/AppError";
 import { CreateAssetEpcInput, ManageAssetEpcInput, UpdateAssetEpcInput } from "./assetEpc.types";
 
-const EPC_LENGTH = 24;
+const GENERATED_EPC_BYTES = 12;
 const EPC_MUTABLE_ASSET_STATUSES: AssetStatus[] = [AssetStatus.AVAILABLE, AssetStatus.RESERVED];
 
 const ASSET_EPC_SELECT = {
@@ -66,12 +66,12 @@ export function normalizeEpcCode(epcCode?: string) {
 export function validateNewEpcCode(epcCode?: string) {
     const normalized = normalizeEpcCode(epcCode);
     if (!normalized) throw new AppError("EPC code is required", 400);
-    if (!new RegExp(`^[0-9A-F]{${EPC_LENGTH}}$`).test(normalized)) throw new AppError(`EPC code must be exactly ${EPC_LENGTH} hexadecimal characters`, 400);
+    if (!/^(?:[0-9A-F]{2})+$/.test(normalized)) throw new AppError("EPC code must contain an even number of hexadecimal characters (0-9, A-F)", 400);
     return normalized;
 }
 
 export function generateEpcCode() {
-    return randomBytes(EPC_LENGTH / 2).toString("hex").toUpperCase();
+    return randomBytes(GENERATED_EPC_BYTES).toString("hex").toUpperCase();
 }
 
 function assertEpcMutableAsset(asset: { isActive: boolean; status: AssetStatus }) {

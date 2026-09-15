@@ -1,0 +1,14 @@
+import { Router } from 'express';
+import { authMiddleware } from '../../middleware/authMiddleware';
+import { cancel, confirm, get, list, prepareComplete, prepareStart, task, tasks } from './repair.controller';
+const router = Router();
+router.use(authMiddleware);
+router.get('/tasks', tasks);
+router.get('/tasks/:id', task);
+router.post('/tasks/:id/confirm', confirm);
+router.post('/tasks/:id/cancel', cancel);
+router.get('/', list);
+router.post('/start', prepareStart);
+router.post('/:id/complete', prepareComplete);
+router.get('/:id', get);
+export default router;

@@ -12,6 +12,7 @@ import { AssetsPages } from "./pages/AssetsPages";
 import "./App.css";
 import { Layout } from "./components/Layout";
 import { IssueBatchesPages } from "./pages/IssueBatchesPages";
+import { StockTakesPages } from "./pages/StockTakesPages";
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
             <Route path="/assets" element={<AssetsPages />} />
             <Route path="/asset-categories" element={<AssetCategoriesPages />} />
             <Route path="/issue-batches" element={<IssueBatchesPages />} />
+            <Route path="/stock-takes" element={<StockTakesPages />} />
             <Route path="/users" element={<UsersPages />} />
             <Route path="/roles" element={<RolesPages />} />
             <Route path="/asset-movements" element={<AssetMovementsPage />} />

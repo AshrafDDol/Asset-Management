@@ -11,6 +11,8 @@ import assetAssignmentRoutes from "../modules/asset-assignments/assetAssignment.
 import assetMovementRoutes from "../modules/asset-movements/assetMovement.routes";
 import issueBatchRoutes from "../modules/issue-batches/issueBatch.routes";
 import handheldWorkRoutes from "../modules/handheld-work/handheldWork.routes";
+import stockTakeRoutes from "../modules/stock-takes/stockTake.routes";
+import repairRoutes from "../modules/repairs/repair.routes";
 
 const router = Router();
 
@@ -34,5 +36,7 @@ router.use("/asset-assignments", assetAssignmentRoutes);
 router.use("/asset-movements", assetMovementRoutes);
 router.use("/issue-batches", issueBatchRoutes);
 router.use("/handheld-work", handheldWorkRoutes);
+router.use("/stock-takes", stockTakeRoutes);
+router.use("/repairs", repairRoutes);
 
 export default router;

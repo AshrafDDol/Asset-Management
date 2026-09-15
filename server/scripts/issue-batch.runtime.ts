@@ -16,7 +16,7 @@ async function main() {
   const operationA = await prisma.location.create({ data: { locationCode: `BO${suffix.slice(-8)}`, name: "Batch Runtime Operation A", locationType: "PRODUCTION_AREA" } }); locationIds.push(operationA.id);
   const operationB = await prisma.location.create({ data: { locationCode: `BM${suffix.slice(-8)}`, name: "Batch Runtime Operation B", locationType: "MACHINE_LOCATION" } }); locationIds.push(operationB.id);
   const assets: Awaited<ReturnType<typeof createAsset>>[] = [];
-  for (let n = 1; n <= 6; n += 1) { const asset = await createAsset({ assetCode: `BATCH-${suffix}-${n}`, itemName: `Runtime Asset ${n}`, categoryId, locationId: home.id, autoGenerateEpc: true, measurementHeight: 100 + n, measurementWidth: 200 + n }); assets.push(asset); assetIds.push(asset.id); assert.match(asset.epc!.epcCode, /^[0-9A-F]{24}$/); }
+  for (let n = 1; n <= 6; n += 1) { const asset = await createAsset({ assetCode: `BATCH-${suffix}-${n}`, itemName: `Runtime Asset ${n}`, categoryId, locationId: home.id, autoGenerateEpc: true, measurementHeight: 100 + n, measurementWidth: 200 + n }); assets.push(asset); assetIds.push(asset.id); assert.match(asset.epc!.epcCode, /^(?:[0-9A-F]{2})+$/); }
   assert.equal(new Set(assets.map((a) => a.epc!.epcCode)).size, 6);
   const search = await getAllAssets({ assetCode: `BATCH-${suffix}`, categoryId }); assert.equal(search.length, 6);
 

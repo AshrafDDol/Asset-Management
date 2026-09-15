@@ -11,6 +11,10 @@ import WorkQueueScreen from '../screen/WorkQueueScreen/WorkQueueScreen';
 import ProcessingScanAllScreen from '../screen/ProcessingScanAllScreen/ProcessingScanAllScreen';
 import ReturnScanScreen from '../screen/ReturnScanScreen/ReturnScanScreen';
 import SwapScanScreen from '../screen/SwapScanScreen/SwapScanScreen';
+import StockTakeQueueScreen from '../screen/StockTakeQueueScreen/StockTakeQueueScreen';
+import StockTakeScanScreen from '../screen/StockTakeScanScreen/StockTakeScanScreen';
+import RepairQueueScreen from '../screen/RepairQueueScreen/RepairQueueScreen';
+import RepairScanScreen from '../screen/RepairScanScreen/RepairScanScreen';
 
 const Stack = createNativeStackNavigator<ScreenStackParamList>();
 
@@ -30,6 +34,10 @@ const AppNavigator: React.FC = () => {
             <Stack.Screen name="ProcessingScanAllScreen" component={ProcessingScanAllScreen} options={{ title: 'Scan All Processing' }} />
             <Stack.Screen name="ReturnScanScreen" component={ReturnScanScreen} options={{ title: 'Return Verification' }} />
             <Stack.Screen name="SwapScanScreen" component={SwapScanScreen} options={{ title: 'Swap Verification' }} />
+            <Stack.Screen name="StockTakeQueueScreen" component={StockTakeQueueScreen} options={{ title: 'Stock Take' }} />
+            <Stack.Screen name="StockTakeScanScreen" component={StockTakeScanScreen} options={{ title: 'Stock Take Scan' }} />
+            <Stack.Screen name="RepairQueueScreen" component={RepairQueueScreen} options={{ title: 'Repair' }} />
+            <Stack.Screen name="RepairScanScreen" component={RepairScanScreen} options={{ title: 'Repair Verification' }} />
         </Stack.Navigator>
     );
 };

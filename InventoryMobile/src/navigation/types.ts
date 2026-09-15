@@ -8,6 +8,10 @@ export type ScreenStackParamList = {
     ProcessingScanAllScreen: undefined;
     ReturnScanScreen: { issueId?: number };
     SwapScanScreen: { taskId: number };
+    StockTakeQueueScreen: undefined;
+    StockTakeScanScreen: { sessionId: number };
+    RepairQueueScreen: undefined;
+    RepairScanScreen: { taskId: number };
 };
 
 export type MainTabParamList = {

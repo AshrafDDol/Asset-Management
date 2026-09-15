@@ -510,3 +510,8 @@ body {
 .asset-edit-epc .secondary-button { align-self: flex-start; margin-top: 4px; }
 .modal-card { width: min(700px, calc(100vw - 40px)); max-height: 90vh; overflow: auto; display: grid; gap: 16px; padding: 24px; background: white; border-radius: 12px; box-shadow: 0 24px 80px #0f172a40; }
 .modal-card textarea { border: 1px solid var(--AshGray); border-radius: 6px; padding: 10px; resize: vertical; }
+.stock-take-wizard { display: grid; gap: 16px; }
+.stock-take-summary { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 12px; margin: 16px 0; }
+.stock-take-summary article { display: grid; gap: 4px; border: 1px solid var(--brightGrey); border-radius: 8px; padding: 14px; background: var(--DrWhite); }
+.stock-take-summary strong { font-size: 26px; color: var(--RoyalBlue); }
+.stock-take-summary span { color: var(--CoolSlateGray); }

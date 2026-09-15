@@ -14,6 +14,7 @@ enum AssetStatus {
   ASSIGNED
   IN_USE
   UNDER_MAINTENANCE
+  UNDER_REPAIR
   LOST
   DISPOSED
 }
@@ -89,6 +90,36 @@ enum HandheldSwapTaskStatus {
   CANCELLED
 }
 
+enum StockTakeStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum StockTakeResult {
+  MISSING
+  FOUND
+}
+
+enum AssetRepairStatus {
+  PREPARED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum RepairAction {
+  START_REPAIR
+  COMPLETE_REPAIR
+}
+
+enum RepairTaskStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
 model Location {
   id                  Int               @id @default(autoincrement())
   locationCode        String            @unique @map("location_code")
@@ -111,6 +142,8 @@ model Location {
   returnAssignments   AssetAssignment[] @relation("AssignmentReturnLocation")
   fromAssetMovements  AssetMovement[]   @relation("AssetMovementFromLocation")
   toAssetMovements    AssetMovement[]   @relation("AssetMovementToLocation")
+  stockTakeSessions   StockTakeSession[]
+  repairAssets        AssetRepair[] @relation("RepairAssetLocation")
 
   @@index([parentLocationId])
   @@index([departmentId])
@@ -185,6 +218,13 @@ model User {
   createdHandheldSwapTasks HandheldSwapTask[] @relation("HandheldSwapCreatedBy")
   confirmedHandheldSwapTasks HandheldSwapTask[] @relation("HandheldSwapConfirmedBy")
   cancelledHandheldSwapTasks HandheldSwapTask[] @relation("HandheldSwapCancelledBy")
+  createdStockTakes    StockTakeSession[] @relation("StockTakeCreatedBy")
+  completedStockTakes  StockTakeSession[] @relation("StockTakeCompletedBy")
+  startedRepairs       AssetRepair[] @relation("RepairStartedBy")
+  completedRepairs     AssetRepair[] @relation("RepairCompletedBy")
+  createdRepairTasks   RepairTask[] @relation("RepairTaskCreatedBy")
+  confirmedRepairTasks RepairTask[] @relation("RepairTaskConfirmedBy")
+  cancelledRepairTasks RepairTask[] @relation("RepairTaskCancelledBy")
 
   @@map("users")
 }
@@ -283,11 +323,120 @@ model Asset {
   issueBatchItems   IssueBatchItem[]
   scanConfirmations AssetScanConfirmation[]
   handheldReplacementTasks HandheldSwapTask[]
+  stockTakeItems    StockTakeItem[]
+  repairs           AssetRepair[]
 
   @@index([categoryId])
   @@index([locationId])
   @@index([homeLocationId])
   @@map("assets")
+}
+
+model AssetRepair {
+  id                   Int               @id @default(autoincrement())
+  assetId              Int               @map("asset_id")
+  status               AssetRepairStatus @default(PREPARED)
+  reason               String
+  repairLocationId     Int               @map("repair_location_id")
+  remarks              String?
+  startedAt            DateTime?         @map("started_at")
+  startedByUserId      Int?               @map("started_by_user_id")
+  completedAt          DateTime?         @map("completed_at")
+  completedByUserId    Int?               @map("completed_by_user_id")
+  completionRemarks    String?            @map("completion_remarks")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  asset             Asset        @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  repairLocation    Location     @relation("RepairAssetLocation", fields: [repairLocationId], references: [id], onDelete: Restrict)
+  startedBy         User?        @relation("RepairStartedBy", fields: [startedByUserId], references: [id], onDelete: Restrict)
+  completedBy       User?        @relation("RepairCompletedBy", fields: [completedByUserId], references: [id], onDelete: Restrict)
+  tasks             RepairTask[]
+
+  @@index([assetId, status])
+  @@index([repairLocationId])
+  @@map("asset_repairs")
+}
+
+model RepairTask {
+  id                Int              @id @default(autoincrement())
+  repairId          Int              @map("repair_id")
+  action            RepairAction
+  status            RepairTaskStatus @default(PENDING)
+  createdByUserId   Int              @map("created_by_user_id")
+  confirmedByUserId Int?             @map("confirmed_by_user_id")
+  cancelledByUserId Int?             @map("cancelled_by_user_id")
+  confirmedAt       DateTime?        @map("confirmed_at")
+  cancelledAt       DateTime?        @map("cancelled_at")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  repair      AssetRepair @relation(fields: [repairId], references: [id], onDelete: Restrict)
+  createdBy   User        @relation("RepairTaskCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  confirmedBy User?       @relation("RepairTaskConfirmedBy", fields: [confirmedByUserId], references: [id], onDelete: Restrict)
+  cancelledBy User?       @relation("RepairTaskCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: Restrict)
+
+  @@index([status, action, createdAt])
+  @@index([repairId, status])
+  @@map("repair_tasks")
+}
+
+model StockTakeSession {
+  id                Int             @id @default(autoincrement())
+  stockTakeNo       String          @unique @map("stock_take_no")
+  stockTakeDate     DateTime        @map("stock_take_date") @db.Date
+  locationId        Int             @map("location_id")
+  pic               String
+  status            StockTakeStatus @default(PENDING)
+  createdByUserId   Int             @map("created_by_user_id")
+  completedByUserId Int?            @map("completed_by_user_id")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  startedAt         DateTime?       @map("started_at")
+  completedAt       DateTime?       @map("completed_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  location    Location        @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  createdBy   User            @relation("StockTakeCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  completedBy User?           @relation("StockTakeCompletedBy", fields: [completedByUserId], references: [id], onDelete: Restrict)
+  items       StockTakeItem[]
+  scans       StockTakeScan[]
+
+  @@index([status, createdAt])
+  @@index([locationId])
+  @@map("stock_take_sessions")
+}
+
+model StockTakeItem {
+  id                   Int             @id @default(autoincrement())
+  sessionId            Int             @map("session_id")
+  assetId              Int             @map("asset_id")
+  expectedAssetCode    String          @map("expected_asset_code")
+  expectedItemName     String          @map("expected_item_name")
+  expectedCategoryName String          @map("expected_category_name")
+  expectedEpc          String?         @map("expected_epc")
+  result               StockTakeResult @default(MISSING)
+  scannedAt            DateTime?       @map("scanned_at")
+  createdAt            DateTime        @default(now()) @map("created_at")
+
+  session StockTakeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  asset   Asset            @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, assetId])
+  @@index([sessionId, result])
+  @@map("stock_take_items")
+}
+
+model StockTakeScan {
+  id        Int      @id @default(autoincrement())
+  sessionId Int      @map("session_id")
+  epc       String
+  scannedAt DateTime @default(now()) @map("scanned_at")
+
+  session StockTakeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, epc])
+  @@index([sessionId])
+  @@map("stock_take_scans")
 }
 
 model HandheldSwapTask {
