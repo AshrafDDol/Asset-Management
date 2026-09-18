@@ -9,7 +9,6 @@ import { UsersPages } from "./pages/UsersPages";
 import { RolesPages } from "./pages/RolesPages";
 import { AssetMovementsPage } from "./pages/AssetMovementPages";
 import { AssetsPages } from "./pages/AssetsPages";
-import "./App.css";
 import { Layout } from "./components/Layout";
 import { IssueBatchesPages } from "./pages/IssueBatchesPages";
 import { StockTakesPages } from "./pages/StockTakesPages";

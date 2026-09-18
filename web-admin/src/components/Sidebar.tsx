@@ -1,55 +1,117 @@
 import {
-    Boxes,
-    Building2,
-    LayoutDashboard,
-    MapPin,
-    MoveRight,
-    ShieldCheck,
-    Package,
-    UserRound,
-    ClipboardList,
+  Boxes,
+  Building2,
+  ClipboardList,
+  LayoutDashboard,
+  MapPin,
+  MoveRight,
+  Package,
+  ShieldCheck,
+  UserRound,
+  Warehouse,
 } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+} from "@/components/ui/sidebar";
 
-const menuItems =[
-    {label: "Dashboard", icon: LayoutDashboard, path: "/dashboard"},
-    {label: "Locations", icon: MapPin, path: "/locations"},
-    {label: "Departments", icon: Building2, path: "/departments"},
-    {label: "Asset Categories", icon: Boxes, path: "/asset-categories"},
-    {label: "Assets", icon: Package, path: "/assets"},
-    {label: "Issue Batches", icon: ClipboardList, path: "/issue-batches"},
-    {label: "Stock Takes", icon: ClipboardList, path: "/stock-takes"},
-    {label: "Asset Movement History", icon: MoveRight, path: "/asset-movements"},
-    {label: "Users", icon: UserRound, path: "/users"},
-    {label: "Roles", icon: ShieldCheck, path: "/roles"},
+export const menuGroups = [
+  {
+    label: "Overview",
+    items: [{ label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" }],
+  },
+  {
+    label: "Master Data",
+    items: [
+      { label: "Locations", icon: MapPin, path: "/locations" },
+      { label: "Departments", icon: Building2, path: "/departments" },
+      { label: "Asset Categories", icon: Boxes, path: "/asset-categories" },
+      { label: "Assets", icon: Package, path: "/assets" },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { label: "Issue Batches", icon: ClipboardList, path: "/issue-batches" },
+      { label: "Stock Takes", icon: ClipboardList, path: "/stock-takes" },
+      { label: "Asset Movement History", icon: MoveRight, path: "/asset-movements" },
+    ],
+  },
+  {
+    label: "Administration",
+    items: [
+      { label: "Users", icon: UserRound, path: "/users" },
+      { label: "Roles", icon: ShieldCheck, path: "/roles" },
+    ],
+  },
 ];
 
-export function Sidebar() {
-    return (
-        <aside className="sidebar">
-            <div className="sidebar-logo">
-                <h2>Evolve Inventory Management</h2>
-                <span>Inventory Admin</span>
-            </div>
-            
-            <nav className="sidebar-nav">
-                {menuItems.map((item) => {
-                    const Icon = item.icon;
+/** Flattened lookup so the header can name the active page. */
+export const menuItems = menuGroups.flatMap((group) => group.items);
 
-                    return (
-                        <NavLink
-                            key={item.path}
-                            to={item.path}
-                            className={({ isActive }) =>
-                                isActive ? "sidebar-link active" : "sidebar-link"
-                        }
-                        >
-                            <Icon size={18}/>   
-                            <span>{item.label}</span>
+export function AppSidebar() {
+  const { pathname } = useLocation();
+
+  return (
+    <Sidebar collapsible="icon">
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <NavLink to="/dashboard">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                  <Warehouse className="size-4" />
+                </div>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold">Evolve Inventory</span>
+                  <span className="truncate text-xs text-muted-foreground">Inventory Admin</span>
+                </div>
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
+
+      <SidebarContent>
+        {menuGroups.map((group) => (
+          <SidebarGroup key={group.label}>
+            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+
+                  return (
+                    <SidebarMenuItem key={item.path}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={pathname.startsWith(item.path)}
+                        tooltip={item.label}
+                      >
+                        <NavLink to={item.path}>
+                          <Icon />
+                          <span>{item.label}</span>
                         </NavLink>
-                    );
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
                 })}
-            </nav>
-        </aside>
-    );
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
+      </SidebarContent>
+
+      <SidebarRail />
+    </Sidebar>
+  );
 }
