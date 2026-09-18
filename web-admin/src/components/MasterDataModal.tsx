@@ -1,4 +1,23 @@
 import type { ReactNode } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type MasterDataModalProps = {
   title: string;
@@ -8,22 +27,40 @@ type MasterDataModalProps = {
   children: ReactNode;
 };
 
+/**
+ * Callers mount this conditionally, so it is always open while rendered.
+ * Dismissal is suppressed while a save is in flight.
+ */
 export function MasterDataModal({ title, description, busy, onClose, children }: MasterDataModalProps) {
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget && !busy) onClose();
-    }}>
-      <section className="master-data-modal" role="dialog" aria-modal="true" aria-labelledby="master-data-modal-title">
-        <div className="page-title-row">
-          <div>
-            <h3 id="master-data-modal-title">{title}</h3>
-            {description && <p>{description}</p>}
-          </div>
-          <button type="button" className="secondary-button" disabled={busy} onClick={onClose}>Close</button>
-        </div>
-        {children}
-      </section>
-    </div>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !busy) onClose();
+      }}
+    >
+      {/* The body scrolls, not the dialog itself, so the rounded corners stay intact. */}
+      <DialogContent
+        className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
+        showCloseButton={!busy}
+        onInteractOutside={(event) => {
+          if (busy) event.preventDefault();
+        }}
+        onEscapeKeyDown={(event) => {
+          if (busy) event.preventDefault();
+        }}
+      >
+        <DialogHeader className="shrink-0 border-b px-6 py-4">
+          <DialogTitle>{title}</DialogTitle>
+          {description ? (
+            <DialogDescription>{description}</DialogDescription>
+          ) : (
+            <DialogDescription className="sr-only">{title}</DialogDescription>
+          )}
+        </DialogHeader>
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5">{children}</div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -37,18 +74,47 @@ type ConfirmDeleteDialogProps = {
   onConfirm: () => void;
 };
 
-export function ConfirmDeleteDialog({ title, recordLabel, actionLabel = "Delete", message = "This action cannot be undone. Records with operational references will be protected.", busy, onCancel, onConfirm }: ConfirmDeleteDialogProps) {
+export function ConfirmDeleteDialog({
+  title,
+  recordLabel,
+  actionLabel = "Delete",
+  message = "This action cannot be undone. Records with operational references will be protected.",
+  busy,
+  onCancel,
+  onConfirm,
+}: ConfirmDeleteDialogProps) {
   return (
-    <div className="modal-backdrop modal-backdrop-confirm" role="presentation">
-      <section className="confirm-delete-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-delete-title">
-        <h3 id="confirm-delete-title">{title}</h3>
-        <p>{recordLabel}</p>
-        <p>{message}</p>
-        <div className="form-actions">
-          <button type="button" className="secondary-button" disabled={busy} onClick={onCancel}>Cancel</button>
-          <button type="button" className="danger-button" disabled={busy} onClick={onConfirm}>{busy ? "Working..." : actionLabel}</button>
-        </div>
-      </section>
-    </div>
+    <AlertDialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !busy) onCancel();
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>
+            <span className="block font-medium text-foreground">{recordLabel}</span>
+            <span className="mt-2 block">{message}</span>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={busy} onClick={onCancel}>
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            disabled={busy}
+            className={cn(buttonVariants({ variant: "destructive" }))}
+            onClick={(event) => {
+              // Confirmation is driven by the caller's async result, not by Radix closing the dialog.
+              event.preventDefault();
+              onConfirm();
+            }}
+          >
+            {busy ? "Working..." : actionLabel}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

@@ -1,11 +1,32 @@
 import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import { Plus, X } from 'lucide-react';
 import { getAssetsApi, type Asset } from '../api/assets.api';
 import { getLocationsApi, type Location } from '../api/locations.api';
 import { cancelStockTakeApi, completeStockTakeApi, createStockTakeApi, getStockTakesApi, type StockTake } from '../api/stockTakes.api';
+import { DatePicker } from '@/components/common/DatePicker';
+import { useErrorToast } from '@/hooks/useErrorToast';
+import { ErrorBox } from '@/components/common/ErrorBox';
+import { Field } from '@/components/common/FilterCard';
+import { PageHeader } from '@/components/common/PageHeader';
+import { SelectField } from '@/components/common/SelectField';
+import { TableCard } from '@/components/common/TableCard';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const message = (error: unknown) => (error as { response?: { data?: { message?: string } }; message?: string }).response?.data?.message || (error as { message?: string }).message || 'Stock Take request failed.';
 const today = () => new Date().toISOString().slice(0, 10);
 const label = (value: string) => value.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+/** Status drives the badge tone in both the list and the detail panel. */
+function StatusBadge({ status }: { status: string }) {
+  const variant = status === 'COMPLETED' ? 'default' : status === 'CANCELLED' ? 'outline' : 'secondary';
+  return <Badge variant={variant} className="whitespace-nowrap">{label(status)}</Badge>;
+}
 
 export function StockTakesPages() {
   const [sessions, setSessions] = useState<StockTake[]>([]);
@@ -19,6 +40,8 @@ export function StockTakesPages() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const chosenLocation = useMemo(() => locations.find(item => String(item.id) === form.locationId), [form.locationId, locations]);
+
+  useErrorToast(error);
 
   async function load() {
     setLoading(true); setError('');
@@ -38,31 +61,235 @@ export function StockTakesPages() {
   }
   async function save() {
     setSaving(true); setError('');
-    try { const created = await createStockTakeApi({ ...form, locationId: Number(form.locationId) }); setSessions(items => [created, ...items]); setSelected(created); setWizard(false); }
+    try { const created = await createStockTakeApi({ ...form, locationId: Number(form.locationId) }); setSessions(items => [created, ...items]); setSelected(created); setWizard(false); toast.success(`Stock Take ${created.stockTakeNo} created.`); }
     catch (reason) { setError(message(reason)); } finally { setSaving(false); }
   }
   async function transition(action: 'complete' | 'cancel') {
     if (!selected) return;
     setSaving(true); setError('');
-    try { const next = action === 'complete' ? await completeStockTakeApi(selected.id) : await cancelStockTakeApi(selected.id); setSelected(next); setSessions(items => items.map(item => item.id === next.id ? next : item)); }
+    try { const next = action === 'complete' ? await completeStockTakeApi(selected.id) : await cancelStockTakeApi(selected.id); setSelected(next); setSessions(items => items.map(item => item.id === next.id ? next : item)); toast.success(action === 'complete' ? `Stock Take ${next.stockTakeNo} completed.` : `Stock Take ${next.stockTakeNo} cancelled.`); }
     catch (reason) { setError(message(reason)); } finally { setSaving(false); }
   }
 
-  return <div className="page">
-    <div className="page-title-row"><div><h2>Stock Takes</h2><p>Location-based audit snapshots. Stock Take never reserves or mutates Assets.</p></div><button className="primary-button" onClick={() => { setWizard(true); setStep(1); setPreview([]); setForm({ stockTakeDate: today(), pic: '', locationId: '' }); }}>Add New Stock Take</button></div>
-    {error && <div className="error-box">{error}</div>}
-    {wizard && <div className="form-panel stock-take-wizard">
-      <div className="issue-tabs"><button className={step === 1 ? 'active' : ''}>1 Detail</button><button className={step === 2 ? 'active' : ''}>2 Location</button><button className={step === 3 ? 'active' : ''}>3 Expected Assets</button></div>
-      {step === 1 && <div className="form-grid"><label className="form-field">Stock Take Code<input value="Auto-generated on Save" disabled /></label><label className="form-field">Date<input type="date" value={form.stockTakeDate} onChange={e => setForm({ ...form, stockTakeDate: e.target.value })} /></label><label className="form-field">PIC<input value={form.pic} onChange={e => setForm({ ...form, pic: e.target.value })} /></label><label className="form-field">Status<input value="PENDING" disabled /></label></div>}
-      {step === 2 && <div className="form-grid"><label className="form-field">IMS Location<select value={form.locationId} onChange={e => setForm({ ...form, locationId: e.target.value })}><option value="">Select Location</option>{locations.map(location => <option key={location.id} value={location.id}>{location.name} ({location.locationCode})</option>)}</select></label></div>}
-      {step === 3 && <><p><strong>{chosenLocation?.name}</strong> — {preview.length} Assets will be frozen in this expectation snapshot.</p><div className="request-table-scroll"><table className="data-table"><thead><tr><th>Asset Code</th><th>Item / Category</th><th>EPC</th></tr></thead><tbody>{preview.map(asset => <tr key={asset.id}><td>{asset.assetCode}</td><td>{asset.itemName}<small>{asset.category?.name || '-'}</small></td><td>{asset.epc?.epcCode || 'No EPC'}</td></tr>)}</tbody></table></div></>}
-      <div className="form-actions">{step > 1 && <button className="secondary-button" onClick={() => setStep(step - 1)}>Back</button>}{step === 1 && <button className="primary-button" disabled={!form.stockTakeDate || !form.pic.trim()} onClick={() => setStep(2)}>Next</button>}{step === 2 && <button className="primary-button" disabled={!form.locationId || saving} onClick={preparePreview}>Load Expected Assets</button>}{step === 3 && <button className="primary-button" disabled={saving} onClick={save}>{saving ? 'Saving...' : 'Save Frozen Snapshot'}</button>}<button className="secondary-button" onClick={() => setWizard(false)}>Close</button></div>
-    </div>}
-    {selected && <div className="form-panel"><div className="page-title-row"><div><h3>{selected.stockTakeNo}</h3><p>{selected.location.name} ({selected.location.locationCode}) · PIC {selected.pic} · {label(selected.status)}</p></div><button className="secondary-button" onClick={() => setSelected(null)}>Close Details</button></div>
-      <div className="stock-take-summary">{Object.entries(selected.summary).map(([key, value]) => <article key={key}><strong>{value}</strong><span>{label(key)}</span></article>)}</div>
-      {(selected.status === 'PENDING' || selected.status === 'IN_PROGRESS') && <div className="form-actions"><button className="primary-button" disabled={saving} onClick={() => transition('complete')}>Complete</button><button className="danger-button" disabled={saving} onClick={() => transition('cancel')}>Cancel</button></div>}
-      <div className="request-table-scroll"><table className="data-table"><thead><tr><th>Asset Code</th><th>Item / Category</th><th>EPC</th><th>Result</th></tr></thead><tbody>{selected.items.map(item => <tr key={item.id}><td>{item.expectedAssetCode}</td><td>{item.expectedItemName}<small>{item.expectedCategoryName}</small></td><td>{item.expectedEpc || 'No EPC'}</td><td>{label(item.result)}</td></tr>)}{selected.unexpected.map(scan => <tr key={`u-${scan.id}`}><td>—</td><td>Unexpected scan</td><td>{scan.epc}</td><td>Unexpected</td></tr>)}</tbody></table></div>
-    </div>}
-    <div className="table-panel">{loading ? <p>Loading Stock Takes...</p> : <table className="data-table"><thead><tr><th>Stock Take</th><th>Date</th><th>Location</th><th>PIC</th><th>Status</th><th>Expected</th><th>Found</th><th>Missing</th><th>Unexpected</th><th></th></tr></thead><tbody>{sessions.map(session => <tr key={session.id}><td>{session.stockTakeNo}</td><td>{new Date(session.stockTakeDate).toLocaleDateString()}</td><td>{session.location.name}</td><td>{session.pic}</td><td>{label(session.status)}</td><td>{session.summary.expected}</td><td>{session.summary.found}</td><td>{session.summary.missing}</td><td>{session.summary.unexpected}</td><td><button className="table-button" onClick={() => setSelected(session)}>Details</button></td></tr>)}</tbody></table>}</div>
-  </div>;
+  const steps = [
+    { value: '1', label: '1  Detail' },
+    { value: '2', label: '2  Location' },
+    { value: '3', label: '3  Expected Assets' },
+  ];
+
+  return (
+    <>
+      <PageHeader
+        title="Stock Takes"
+        description="Location-based audit snapshots. Stock Take never reserves or mutates Assets."
+        actions={
+          <Button onClick={() => { setWizard(true); setStep(1); setPreview([]); setForm({ stockTakeDate: today(), pic: '', locationId: '' }); }}>
+            <Plus />
+            Add New Stock Take
+          </Button>
+        }
+      />
+
+      <ErrorBox message={error} />
+
+      {wizard && (
+        <Card>
+          <CardHeader>
+            <CardTitle>New Stock Take</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Steps are driven by the wizard's own guards, so triggers are display-only. */}
+            <Tabs value={String(step)}>
+              <TabsList>
+                {steps.map(item => (
+                  <TabsTrigger key={item.value} value={item.value} disabled>
+                    {item.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+
+            {step === 1 && (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Field label="Stock Take Code" htmlFor="stock-take-code">
+                  <Input id="stock-take-code" value="Auto-generated on Save" disabled />
+                </Field>
+                <Field label="Date" htmlFor="stock-take-date">
+                  <DatePicker
+                    id="stock-take-date"
+                    value={form.stockTakeDate}
+                    clearable={false}
+                    onChange={stockTakeDate => setForm({ ...form, stockTakeDate })}
+                  />
+                </Field>
+                <Field label="PIC" htmlFor="stock-take-pic">
+                  <Input id="stock-take-pic" value={form.pic} onChange={e => setForm({ ...form, pic: e.target.value })} />
+                </Field>
+                <Field label="Status" htmlFor="stock-take-status">
+                  <Input id="stock-take-status" value="PENDING" disabled />
+                </Field>
+              </div>
+            )}
+
+            {step === 2 && (
+              <div className="grid gap-4 sm:max-w-md">
+                <Field label="IMS Location" htmlFor="stock-take-location">
+                  <SelectField
+                    id="stock-take-location"
+                    value={form.locationId}
+                    onChange={value => setForm({ ...form, locationId: value })}
+                    placeholder="Select Location"
+                    options={locations.map(location => ({ value: String(location.id), label: `${location.name} (${location.locationCode})` }))}
+                  />
+                </Field>
+              </div>
+            )}
+
+            {step === 3 && (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">{chosenLocation?.name}</span> — {preview.length} Assets will be frozen in this expectation snapshot.
+                </p>
+                <div className="max-h-80 overflow-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead>Asset Code</TableHead>
+                        <TableHead>Item / Category</TableHead>
+                        <TableHead>EPC</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {preview.length === 0 ? (
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell colSpan={3} className="h-20 text-center text-muted-foreground">
+                            No Assets are currently held at this Location.
+                          </TableCell>
+                        </TableRow>
+                      ) : preview.map(asset => (
+                        <TableRow key={asset.id}>
+                          <TableCell className="font-mono text-xs">{asset.assetCode}</TableCell>
+                          <TableCell>
+                            <div className="font-medium">{asset.itemName}</div>
+                            <div className="text-xs text-muted-foreground">{asset.category?.name || '-'}</div>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{asset.epc?.epcCode || 'No EPC'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {step > 1 && <Button variant="outline" className="mr-auto" onClick={() => setStep(step - 1)}>Back</Button>}
+              <Button variant="ghost" onClick={() => setWizard(false)}>Close</Button>
+              {step === 1 && <Button disabled={!form.stockTakeDate || !form.pic.trim()} onClick={() => setStep(2)}>Next</Button>}
+              {step === 2 && <Button disabled={!form.locationId || saving} onClick={preparePreview}>Load Expected Assets</Button>}
+              {step === 3 && <Button disabled={saving} onClick={save}>{saving ? 'Saving...' : 'Save Frozen Snapshot'}</Button>}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {selected && (
+        <Card>
+          <CardHeader className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2">
+                {selected.stockTakeNo}
+                <StatusBadge status={selected.status} />
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                {selected.location.name} ({selected.location.locationCode}) · PIC {selected.pic}
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>
+              <X />
+              Close Details
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {Object.entries(selected.summary).map(([key, value]) => (
+                <div key={key} className="rounded-lg border p-3">
+                  <div className="text-2xl font-semibold tabular-nums">{value}</div>
+                  <div className="text-xs text-muted-foreground">{label(key)}</div>
+                </div>
+              ))}
+            </div>
+
+            {(selected.status === 'PENDING' || selected.status === 'IN_PROGRESS') && (
+              <div className="flex flex-wrap gap-2">
+                <Button disabled={saving} onClick={() => transition('complete')}>Complete</Button>
+                <Button variant="destructive" disabled={saving} onClick={() => transition('cancel')}>Cancel</Button>
+              </div>
+            )}
+
+            <div className="max-h-96 overflow-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Asset Code</TableHead>
+                    <TableHead>Item / Category</TableHead>
+                    <TableHead>EPC</TableHead>
+                    <TableHead>Result</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selected.items.map(item => (
+                    <TableRow key={item.id}>
+                      <TableCell className="font-mono text-xs">{item.expectedAssetCode}</TableCell>
+                      <TableCell>
+                        <div className="font-medium">{item.expectedItemName}</div>
+                        <div className="text-xs text-muted-foreground">{item.expectedCategoryName}</div>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{item.expectedEpc || 'No EPC'}</TableCell>
+                      <TableCell>{label(item.result)}</TableCell>
+                    </TableRow>
+                  ))}
+                  {selected.unexpected.map(scan => (
+                    <TableRow key={`u-${scan.id}`}>
+                      <TableCell>—</TableCell>
+                      <TableCell className="text-muted-foreground">Unexpected scan</TableCell>
+                      <TableCell className="font-mono text-xs">{scan.epc}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">Unexpected</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <TableCard
+        columns={['Stock Take', 'Date', 'Location', 'PIC', 'Status', 'Expected', 'Found', 'Missing', 'Unexpected', '']}
+        loading={loading}
+        isEmpty={sessions.length === 0}
+        emptyMessage="No Stock Takes have been recorded yet."
+        itemLabel="stock take"
+      >
+        {sessions.map(session => (
+          <TableRow key={session.id}>
+            <TableCell className="font-medium">{session.stockTakeNo}</TableCell>
+            <TableCell className="whitespace-nowrap">{new Date(session.stockTakeDate).toLocaleDateString()}</TableCell>
+            <TableCell>{session.location.name}</TableCell>
+            <TableCell>{session.pic}</TableCell>
+            <TableCell><StatusBadge status={session.status} /></TableCell>
+            <TableCell className="tabular-nums">{session.summary.expected}</TableCell>
+            <TableCell className="tabular-nums">{session.summary.found}</TableCell>
+            <TableCell className="tabular-nums">{session.summary.missing}</TableCell>
+            <TableCell className="tabular-nums">{session.summary.unexpected}</TableCell>
+            <TableCell>
+              <Button variant="ghost" size="sm" onClick={() => setSelected(session)}>Details</Button>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableCard>
+    </>
+  );
 }

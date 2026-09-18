@@ -1,13 +1,29 @@
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import { Plus, RefreshCw } from "lucide-react";
 import { ConfirmDeleteDialog, MasterDataModal } from "../components/MasterDataModal";
 import { useUserPagesFunction } from "./functionPages/userPagesFunction";
 import { chronological, type ListOrder } from "../utils/listOrder";
+import { useErrorToast } from "@/hooks/useErrorToast";
+import { ErrorBox } from "@/components/common/ErrorBox";
+import { Field, FilterCard } from "@/components/common/FilterCard";
+import { PageHeader } from "@/components/common/PageHeader";
+import { ORDER_OPTIONS, STATUS_OPTIONS, SelectField } from "@/components/common/SelectField";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { TableCard } from "@/components/common/TableCard";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { TableCell, TableRow } from "@/components/ui/table";
+
+const EMPTY_FILTERS = { search: "", role: "", department: "", status: "" };
 
 export function UsersPages() {
   const { users, roles, departments, form, loading, saving, error, isEditing, editingUserId, updateForm, loadPageData, handleEditUser, handleCancelEdit, handleSubmitUser, handleDeactivateUser } = useUserPagesFunction();
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [filters, setFilters] = useState({ search: "", role: "", department: "", status: "" });
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [order, setOrder] = useState<ListOrder>("LATEST");
   const editing = users.find((user) => user.id === editingUserId);
   const visible = useMemo(() => {
@@ -19,27 +35,157 @@ export function UsersPages() {
       (!filters.status || String(user.isActive !== false) === filters.status)
     ), (user) => user.createdAt, order);
   }, [users, filters, order]);
+  useErrorToast(error);
   const close = () => { handleCancelEdit(); setModalOpen(false); setConfirmingDelete(false); };
 
-  return <div className="page">
-    <div className="page-title-row"><div><h2>Users</h2><p>Manage system Users and role assignments.</p></div><div className="form-actions"><button className="primary-button" onClick={() => { handleCancelEdit(); setModalOpen(true); }}>+ Register User</button><button className="secondary-button" onClick={loadPageData}>Refresh</button></div></div>
-    {!modalOpen && error && <div className="error-box">{error}</div>}
-    <div className="form-panel list-filter-panel"><strong>Search / Filters</strong><div className="form-grid"><label className="form-field">Name / Username / Email<input value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} /></label><label className="form-field">Role<select value={filters.role} onChange={(event) => setFilters({ ...filters, role: event.target.value })}><option value="">All roles</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label><label className="form-field">Department<select value={filters.department} onChange={(event) => setFilters({ ...filters, department: event.target.value })}><option value="">All departments</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label><label className="form-field">Active Status<select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">All</option><option value="true">Active</option><option value="false">Inactive</option></select></label><label className="form-field">Order<select value={order} onChange={(event) => setOrder(event.target.value as ListOrder)}><option value="LATEST">Latest</option><option value="OLDEST">Oldest</option></select></label></div><button className="secondary-button" onClick={() => setFilters({ search: "", role: "", department: "", status: "" })}>Clear Filters</button></div>
-    <div className="table-panel">{loading ? <p>Loading users...</p> : <table className="data-table"><thead><tr><th>No.</th><th>Username</th><th>Full Name</th><th>Email</th><th>Role</th><th>Department</th><th>Status</th><th>Action</th></tr></thead><tbody>
-      {visible.length === 0 ? <tr><td colSpan={8}>No Users match the current filters.</td></tr> : visible.map((user, index) => <tr key={user.id}><td>{index + 1}</td><td>{user.username}</td><td>{user.fullName}</td><td>{user.email || "-"}</td><td>{user.role?.name || "-"}</td><td>{user.department?.name || "-"}</td><td>{user.isActive === false ? "Inactive" : "Active"}</td><td><button className="table-button" onClick={() => { handleEditUser(user); setModalOpen(true); }}>Edit</button></td></tr>)}
-    </tbody></table>}</div>
-    {modalOpen && <MasterDataModal title={isEditing ? "Edit User" : "Register User"} busy={saving} onClose={close}>
-      {error && <div className="error-box">{error}</div>}
-      <form className="form-panel" onSubmit={async (event) => { if (await handleSubmitUser(event)) close(); }}><div className="form-grid">
-        <div className="form-field"><label>Username *</label><input value={form.username} onChange={(event) => updateForm("username", event.target.value)} /></div>
-        <div className="form-field"><label>Password{isEditing ? "" : " *"}</label><input type="password" value={form.password} onChange={(event) => updateForm("password", event.target.value)} placeholder={isEditing ? "Leave blank to keep password" : "Enter password"} /></div>
-        <div className="form-field"><label>Full Name *</label><input value={form.fullName} onChange={(event) => updateForm("fullName", event.target.value)} /></div>
-        <div className="form-field"><label>Email *</label><input type="email" value={form.email} onChange={(event) => updateForm("email", event.target.value)} /></div>
-        <div className="form-field"><label>Role *</label><select value={form.roleId} onChange={(event) => updateForm("roleId", event.target.value)}><option value="">Select role</option>{roles.filter((role) => role.isActive !== false || String(role.id) === form.roleId).map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></div>
-        <div className="form-field"><label>Department</label><select value={form.departmentId} onChange={(event) => updateForm("departmentId", event.target.value)}><option value="">No department</option>{departments.filter((department) => department.isActive !== false || String(department.id) === form.departmentId).map((department) => <option key={department.id} value={department.id}>{department.departmentCode} — {department.name}</option>)}</select></div>
-        <div className="form-field checkbox-field"><label>Status</label><label className="checkbox-row"><input type="checkbox" checked={form.isActive} onChange={(event) => updateForm("isActive", event.target.checked)} />Active</label></div>
-      </div><div className="form-actions">{isEditing && <button type="button" className="danger-button" onClick={() => setConfirmingDelete(true)}>Deactivate User</button>}<button type="button" className="secondary-button" onClick={close}>Cancel</button><button className="primary-button" disabled={saving} type="submit">{saving ? "Saving..." : isEditing ? "Save Changes" : "Register"}</button></div></form>
-      {confirmingDelete && editing && <ConfirmDeleteDialog title="Deactivate User?" recordLabel={`Username: ${editing.username}`} actionLabel="Deactivate" message="The User will be unable to sign in, while operational audit history remains intact." busy={saving} onCancel={() => setConfirmingDelete(false)} onConfirm={async () => { if (await handleDeactivateUser()) close(); else setConfirmingDelete(false); }} />}
-    </MasterDataModal>}
-  </div>;
+  const roleOptions = roles.map((role) => ({ value: String(role.id), label: role.name }));
+  const departmentOptions = departments.map((department) => ({ value: String(department.id), label: department.name }));
+
+  return (
+    <>
+      <PageHeader
+        title="Users"
+        description="Manage system Users and role assignments."
+        actions={
+          <>
+            <Button onClick={() => { handleCancelEdit(); setModalOpen(true); }}>
+              <Plus />
+              Register User
+            </Button>
+            <Button variant="outline" onClick={loadPageData}>
+              <RefreshCw />
+              Refresh
+            </Button>
+          </>
+        }
+      />
+
+      {!modalOpen && <ErrorBox message={error} />}
+
+      <FilterCard onClear={() => setFilters(EMPTY_FILTERS)}>
+        <Field label="Name / Username / Email" htmlFor="filter-user-search">
+          <Input id="filter-user-search" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
+        </Field>
+        <Field label="Role" htmlFor="filter-user-role">
+          <SelectField id="filter-user-role" value={filters.role} onChange={(role) => setFilters({ ...filters, role })} options={roleOptions} emptyLabel="All roles" placeholder="All roles" />
+        </Field>
+        <Field label="Department" htmlFor="filter-user-department">
+          <SelectField id="filter-user-department" value={filters.department} onChange={(department) => setFilters({ ...filters, department })} options={departmentOptions} emptyLabel="All departments" placeholder="All departments" />
+        </Field>
+        <Field label="Active Status" htmlFor="filter-user-status">
+          <SelectField id="filter-user-status" value={filters.status} onChange={(status) => setFilters({ ...filters, status })} options={STATUS_OPTIONS} emptyLabel="All" placeholder="All" />
+        </Field>
+        <Field label="Order" htmlFor="filter-user-order">
+          <SelectField id="filter-user-order" value={order} onChange={(value) => setOrder(value as ListOrder)} options={ORDER_OPTIONS} />
+        </Field>
+      </FilterCard>
+
+      <TableCard
+        columns={["No.", "Username", "Full Name", "Email", "Role", "Department", "Status", "Action"]}
+        loading={loading}
+        isEmpty={visible.length === 0}
+        emptyMessage="No Users match the current filters."
+        itemLabel="user"
+      >
+        {visible.map((user, index) => (
+          <TableRow key={user.id}>
+            <TableCell className="text-muted-foreground">{index + 1}</TableCell>
+            <TableCell className="font-medium">{user.username}</TableCell>
+            <TableCell>{user.fullName}</TableCell>
+            <TableCell className="text-muted-foreground">{user.email || "-"}</TableCell>
+            <TableCell>{user.role?.name || "-"}</TableCell>
+            <TableCell>{user.department?.name || "-"}</TableCell>
+            <TableCell><StatusBadge isActive={user.isActive} /></TableCell>
+            <TableCell>
+              <Button variant="ghost" size="sm" onClick={() => { handleEditUser(user); setModalOpen(true); }}>
+                Edit
+              </Button>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableCard>
+
+      {modalOpen && (
+        <MasterDataModal title={isEditing ? "Edit User" : "Register User"} busy={saving} onClose={close}>
+          <ErrorBox message={error} />
+
+          <form className="space-y-6" onSubmit={async (event) => { if (await handleSubmitUser(event)) { toast.success(isEditing ? "User updated." : "User registered."); close(); } }}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Username *" htmlFor="user-username">
+                <Input id="user-username" value={form.username} onChange={(event) => updateForm("username", event.target.value)} />
+              </Field>
+              <Field label={`Password${isEditing ? "" : " *"}`} htmlFor="user-password">
+                <Input
+                  id="user-password"
+                  type="password"
+                  value={form.password}
+                  onChange={(event) => updateForm("password", event.target.value)}
+                  placeholder={isEditing ? "Leave blank to keep password" : "Enter password"}
+                />
+              </Field>
+              <Field label="Full Name *" htmlFor="user-fullname">
+                <Input id="user-fullname" value={form.fullName} onChange={(event) => updateForm("fullName", event.target.value)} />
+              </Field>
+              <Field label="Email *" htmlFor="user-email">
+                <Input id="user-email" type="email" value={form.email} onChange={(event) => updateForm("email", event.target.value)} />
+              </Field>
+              <Field label="Role *" htmlFor="user-role">
+                <SelectField
+                  id="user-role"
+                  value={form.roleId}
+                  onChange={(roleId) => updateForm("roleId", roleId)}
+                  placeholder="Select role"
+                  options={roles
+                    .filter((role) => role.isActive !== false || String(role.id) === form.roleId)
+                    .map((role) => ({ value: String(role.id), label: role.name }))}
+                />
+              </Field>
+              <Field label="Department" htmlFor="user-department">
+                <SelectField
+                  id="user-department"
+                  value={form.departmentId}
+                  onChange={(departmentId) => updateForm("departmentId", departmentId)}
+                  emptyLabel="No department"
+                  placeholder="No department"
+                  options={departments
+                    .filter((department) => department.isActive !== false || String(department.id) === form.departmentId)
+                    .map((department) => ({ value: String(department.id), label: `${department.departmentCode} — ${department.name}` }))}
+                />
+              </Field>
+              <Field label="Status">
+                <div className="flex h-9 items-center gap-2">
+                  <Checkbox id="user-active" checked={form.isActive} onCheckedChange={(checked) => updateForm("isActive", checked === true)} />
+                  <Label htmlFor="user-active" className="font-normal">Active</Label>
+                </div>
+              </Field>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {isEditing && (
+                <Button type="button" variant="destructive" className="mr-auto" onClick={() => setConfirmingDelete(true)}>
+                  Deactivate User
+                </Button>
+              )}
+              <Button type="button" variant="outline" onClick={close}>Cancel</Button>
+              <Button disabled={saving} type="submit">
+                {saving ? "Saving..." : isEditing ? "Save Changes" : "Register"}
+              </Button>
+            </div>
+          </form>
+
+          {confirmingDelete && editing && (
+            <ConfirmDeleteDialog
+              title="Deactivate User?"
+              recordLabel={`Username: ${editing.username}`}
+              actionLabel="Deactivate"
+              message="The User will be unable to sign in, while operational audit history remains intact."
+              busy={saving}
+              onCancel={() => setConfirmingDelete(false)}
+              onConfirm={async () => { if (await handleDeactivateUser()) { toast.success("User deactivated."); close(); } else setConfirmingDelete(false); }}
+            />
+          )}
+        </MasterDataModal>
+      )}
+    </>
+  );
 }
