@@ -15,6 +15,8 @@ import StockTakeQueueScreen from '../screen/StockTakeQueueScreen/StockTakeQueueS
 import StockTakeScanScreen from '../screen/StockTakeScanScreen/StockTakeScanScreen';
 import RepairQueueScreen from '../screen/RepairQueueScreen/RepairQueueScreen';
 import RepairScanScreen from '../screen/RepairScanScreen/RepairScanScreen';
+import ReturnQueueScreen from '../screen/ReturnQueueScreen/ReturnQueueScreen';
+import SwapQueueScreen from '../screen/SwapQueueScreen/SwapQueueScreen';
 
 const Stack = createNativeStackNavigator<ScreenStackParamList>();
 
@@ -28,12 +30,14 @@ const AppNavigator: React.FC = () => {
                 component={RFIDDiagnosticScreen}
                 options={{ title: 'Asset Management Test' }}
             />
-            <Stack.Screen name="PendingIssuesScreen" component={PendingIssuesScreen} options={{ title: 'Pending Issues' }} />
+            <Stack.Screen name="PendingIssuesScreen" component={PendingIssuesScreen} options={{ title: 'Asset Issue' }} />
             <Stack.Screen name="IssueConfirmationScreen" component={IssueConfirmationScreen} options={{ title: 'Issue Confirmation' }} />
             <Stack.Screen name="WorkQueueScreen" component={WorkQueueScreen} options={{ title: 'Work Queue' }} />
             <Stack.Screen name="ProcessingScanAllScreen" component={ProcessingScanAllScreen} options={{ title: 'Scan All Processing' }} />
             <Stack.Screen name="ReturnScanScreen" component={ReturnScanScreen} options={{ title: 'Return Verification' }} />
+            <Stack.Screen name="ReturnQueueScreen" component={ReturnQueueScreen} options={{ title: 'Return' }} />
             <Stack.Screen name="SwapScanScreen" component={SwapScanScreen} options={{ title: 'Swap Verification' }} />
+            <Stack.Screen name="SwapQueueScreen" component={SwapQueueScreen} options={{ title: 'Swap' }} />
             <Stack.Screen name="StockTakeQueueScreen" component={StockTakeQueueScreen} options={{ title: 'Stock Take' }} />
             <Stack.Screen name="StockTakeScanScreen" component={StockTakeScanScreen} options={{ title: 'Stock Take Scan' }} />
             <Stack.Screen name="RepairQueueScreen" component={RepairQueueScreen} options={{ title: 'Repair' }} />

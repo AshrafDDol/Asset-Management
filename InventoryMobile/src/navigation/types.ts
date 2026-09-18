@@ -7,7 +7,9 @@ export type ScreenStackParamList = {
     WorkQueueScreen: undefined;
     ProcessingScanAllScreen: undefined;
     ReturnScanScreen: { issueId?: number };
+    ReturnQueueScreen: undefined;
     SwapScanScreen: { taskId: number };
+    SwapQueueScreen: undefined;
     StockTakeQueueScreen: undefined;
     StockTakeScanScreen: { sessionId: number };
     RepairQueueScreen: undefined;

@@ -36,7 +36,12 @@ const PendingIssuesScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Pending Issue &amp; Confirmation</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>Pending Issue &amp; Confirmation</Text>
+        <Pressable style={styles.scanAllButton} onPress={() => navigation.navigate('ProcessingScanAllScreen')}>
+          <Text style={styles.scanAllText}>Scan All</Text>
+        </Pressable>
+      </View>
       {error && <Text style={styles.error}>{error}</Text>}
       <FlatList
         data={issues}
@@ -48,11 +53,9 @@ const PendingIssuesScreen: React.FC<Props> = ({ navigation }) => {
             style={styles.card}
             onPress={() => navigation.navigate('IssueConfirmationScreen', { issueId: item.id })}>
             <Text style={styles.cardTitle}>{item.jobNo || item.batchNo}</Text>
-            <Text>Request: {item.batchNo}</Text>
             <Text>To Location: {item.toLocation?.name || 'Per asset'}</Text>
             <Text>Recipient: {item.recipient?.fullName || 'Per asset'}</Text>
             <Text>Expected assets: {item.expectedAssetCount}</Text>
-            <Text>Status: {item.status}</Text>
           </Pressable>
         )}
       />
@@ -63,7 +66,10 @@ const PendingIssuesScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  title: { fontSize: 22, fontWeight: '700', marginBottom: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 },
+  title: { flex: 1, fontSize: 22, fontWeight: '700' },
+  scanAllButton: { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: '#1F6FEB' },
+  scanAllText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   card: { borderColor: '#bbb', borderWidth: 1, borderRadius: 6, padding: 14, marginBottom: 10, gap: 3 },
   cardTitle: { fontSize: 17, fontWeight: '700' },
   error: { color: '#a51d1d', marginBottom: 10 },
