@@ -22,7 +22,7 @@ export function EpcCoverageChart({ assets }: { assets: Asset[] }) {
   return (
     <Card className="flex h-full flex-col">
       <CardHeader>
-        <CardTitle>EPC Coverage</CardTitle>
+        <CardTitle>RFID Coverage</CardTitle>
         <CardDescription>Assets carrying an active RFID tag</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-1 items-center justify-center">

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ArrowRight, RefreshCw } from "lucide-react";
 import { getAssetMovementsApi, type AssetMovement } from "../api/assetMovements.api";
 import { chronological, type ListOrder } from "../utils/listOrder";
+import { movementTypeLabel } from "../utils/movementType";
 import { DatePicker } from "@/components/common/DatePicker";
 import { ErrorBox } from "@/components/common/ErrorBox";
 import { Field, FilterCard } from "@/components/common/FilterCard";
@@ -22,7 +23,6 @@ import { Separator } from "@/components/ui/separator";
 import { TableCell, TableRow } from "@/components/ui/table";
 
 const errorMessage = (error: unknown) => (error as { response?: { data?: { message?: string } }; message?: string }).response?.data?.message || (error as { message?: string }).message || "Failed to load Asset Movement History.";
-const friendly = (value: string) => value.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const locationLabel = (location: AssetMovement["fromLocation"]) => location ? `${location.name} (${location.locationCode})` : "-";
 const departmentLabel = (department: AssetMovement["fromDepartment"]) => department ? `${department.name} (${department.departmentCode})` : "-";
 const movementJobNo = (movement: AssetMovement) => movement.issueBatchItem?.issueBatch.jobNo?.trim() || "";
@@ -138,7 +138,7 @@ export function AssetMovementsPage() {
           <SelectField id="filter-movement-to-department" value={filters.toDepartment} onChange={(value) => setFilters({ ...filters, toDepartment: value })} options={choices.toDepartments.map((item) => ({ value: String(item.id), label: item.name }))} emptyLabel="All" placeholder="All" />
         </Field>
         <Field label="Movement Type" htmlFor="filter-movement-type">
-          <SelectField id="filter-movement-type" value={filters.type} onChange={(value) => setFilters({ ...filters, type: value })} options={choices.types.map((type) => ({ value: type, label: friendly(type) }))} emptyLabel="All" placeholder="All" />
+          <SelectField id="filter-movement-type" value={filters.type} onChange={(value) => setFilters({ ...filters, type: value })} options={choices.types.map((type) => ({ value: type, label: movementTypeLabel(type) }))} emptyLabel="All" placeholder="All" />
         </Field>
         <Field label="Performed By" htmlFor="filter-movement-performer">
           <SelectField id="filter-movement-performer" value={filters.performer} onChange={(value) => setFilters({ ...filters, performer: value })} options={choices.performers.map((user) => ({ value: String(user.id), label: user.fullName || user.username }))} emptyLabel="All" placeholder="All" />
@@ -173,7 +173,7 @@ export function AssetMovementsPage() {
               </div>
             </TableCell>
             <TableCell>
-              <Badge variant="secondary" className="whitespace-nowrap">{friendly(movement.movementType)}</Badge>
+              <Badge variant="secondary" className="whitespace-nowrap">{movementTypeLabel(movement.movementType)}</Badge>
             </TableCell>
             <TableCell className="max-w-72">
               <div className="flex items-center gap-1.5 text-xs">
@@ -229,7 +229,7 @@ function MovementDetailsDialog({ movement, close }: { movement: AssetMovement | 
                 <DetailRow label="Job No." value={movementJobNo(movement)} />
                 <DetailRow
                   label="Movement Type"
-                  value={<Badge variant="secondary">{friendly(movement.movementType)}</Badge>}
+                  value={<Badge variant="secondary">{movementTypeLabel(movement.movementType)}</Badge>}
                 />
                 <DetailRow
                   label="Performed By"

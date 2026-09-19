@@ -11,9 +11,9 @@ async function main() {
   const role = await prisma.role.findFirstOrThrow({ where: { isActive: true } });
   const user = await prisma.user.create({ data: { username: `all-jobs-${suffix}`, fullName: "Scan All Jobs Runtime", email: `all-jobs-${suffix}@example.test`, passwordHash: "runtime-only", roleId: role.id } }); userId = user.id;
   const category = await prisma.assetCategory.create({ data: { categoryCode: `SAJ${suffix.slice(-7)}`, name: `Scan All Jobs ${suffix}` } }); categoryId = category.id;
-  const home = await prisma.location.create({ data: { locationCode: `SJH${suffix.slice(-7)}`, name: "Scan Jobs Home", locationType: "BIN" } }); locationIds.push(home.id);
-  const operationA = await prisma.location.create({ data: { locationCode: `SJA${suffix.slice(-7)}`, name: "Scan Jobs Operation A", locationType: "PRODUCTION_AREA" } }); locationIds.push(operationA.id);
-  const operationB = await prisma.location.create({ data: { locationCode: `SJB${suffix.slice(-7)}`, name: "Scan Jobs Operation B", locationType: "MACHINE_LOCATION" } }); locationIds.push(operationB.id);
+  const home = await prisma.location.create({ data: { locationCode: `SJH${suffix.slice(-7)}`, name: "Scan Jobs Home", locationType: "STORAGE" } }); locationIds.push(home.id);
+  const operationA = await prisma.location.create({ data: { locationCode: `SJA${suffix.slice(-7)}`, name: "Scan Jobs Operation A", locationType: "OPERATION" } }); locationIds.push(operationA.id);
+  const operationB = await prisma.location.create({ data: { locationCode: `SJB${suffix.slice(-7)}`, name: "Scan Jobs Operation B", locationType: "OPERATION" } }); locationIds.push(operationB.id);
   const assets: Awaited<ReturnType<typeof createAsset>>[] = [];
   for (let n = 1; n <= 8; n += 1) {
     const asset = await createAsset({ assetCode: `SAJ-${suffix}-${n}`, itemName: `Scan Jobs Asset ${n}`, categoryId, locationId: home.id, autoGenerateEpc: true });

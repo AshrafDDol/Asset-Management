@@ -1,5 +1,6 @@
 import { Bar, BarChart, CartesianGrid, Rectangle, XAxis, YAxis } from "recharts";
 import type { AssetMovement } from "@/api/assetMovements.api";
+import { movementTypeLabel } from "@/utils/movementType";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ChartContainer,
@@ -10,27 +11,21 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 
-/**
- * Three distinct series, so this is the one chart here doing a categorical job.
- * Slots 1-3 (blue/orange/aqua) are validated for all pairs on a white surface.
- * Aqua sits under 3:1 against the card, so identity is never carried by colour
- * alone: a legend is always present and the tooltip names every segment.
- */
-const config = {
-  LOCATION_TRANSFER: { label: "Location", color: "var(--chart-1)" },
-  DEPARTMENT_TRANSFER: { label: "Department", color: "var(--chart-2)" },
-  FULL_TRANSFER: { label: "Full", color: "var(--chart-3)" },
-} satisfies ChartConfig;
-
-const SERIES = Object.keys(config) as (keyof typeof config)[];
+const SERIES_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+];
 
 type BarShapeProps = { payload?: Record<string, number> };
 
 /** Highest series that actually has a value in this column, so the cap is visible. */
-function topSeriesOf(row?: Record<string, number>) {
+function topSeriesOf(series: string[], row?: Record<string, number>) {
   if (!row) return null;
-  for (let i = SERIES.length - 1; i >= 0; i--) {
-    if ((row[SERIES[i]] ?? 0) > 0) return SERIES[i];
+  for (let i = series.length - 1; i >= 0; i--) {
+    if ((row[series[i]] ?? 0) > 0) return series[i];
   }
   return null;
 }
@@ -61,6 +56,16 @@ export function MovementsByTypeChart({
   const byDay = days <= 14;
   const step = byDay ? 1 : 7;
   const bucketCount = Math.max(1, Math.ceil(days / step));
+  const series = [...new Set(movements.map((movement) => movement.movementType))].sort();
+  const config = Object.fromEntries(
+    series.map((movementType, index) => [
+      movementType,
+      {
+        label: movementTypeLabel(movementType),
+        color: SERIES_COLORS[index % SERIES_COLORS.length],
+      },
+    ])
+  ) satisfies ChartConfig;
 
   const buckets = new Map<string, Record<string, number>>();
   const anchor = byDay ? startOfDay(new Date()) : weekStart(new Date());
@@ -68,16 +73,14 @@ export function MovementsByTypeChart({
   for (let i = bucketCount - 1; i >= 0; i--) {
     const start = new Date(anchor);
     start.setDate(start.getDate() - i * step);
-    buckets.set(start.toISOString().slice(0, 10), Object.fromEntries(SERIES.map((s) => [s, 0])));
+    buckets.set(start.toISOString().slice(0, 10), Object.fromEntries(series.map((type) => [type, 0])));
   }
 
   movements.forEach((movement) => {
     const date = new Date(movement.movementDate);
     const key = (byDay ? startOfDay(date) : weekStart(date)).toISOString().slice(0, 10);
     const bucket = buckets.get(key);
-    // Types outside the three known series are ignored rather than silently
-    // folded into one of them.
-    if (bucket && movement.movementType in bucket) bucket[movement.movementType] += 1;
+    if (bucket) bucket[movement.movementType] += 1;
   });
 
   const data = [...buckets.entries()].map(([key, counts]) => ({
@@ -94,6 +97,11 @@ export function MovementsByTypeChart({
         <CardDescription>{byDay ? "Daily" : "Weekly"} breakdown over the {label}</CardDescription>
       </CardHeader>
       <CardContent>
+        {series.length === 0 ? (
+          <p className="flex h-72 items-center justify-center text-sm text-muted-foreground">
+            No movements recorded in this period.
+          </p>
+        ) : (
         <ChartContainer config={config} className="h-72 w-full">
           {/* Bars are capped rather than filling their band: with only a handful of
               buckets they would otherwise render as ~45px slabs. */}
@@ -103,10 +111,10 @@ export function MovementsByTypeChart({
             <YAxis tickLine={false} axisLine={false} width={28} allowDecimals={false} />
             <ChartTooltip content={<ChartTooltipContent />} />
             <ChartLegend content={<ChartLegendContent />} />
-            {SERIES.map((series) => (
+            {series.map((movementType) => (
               <Bar
-                key={series}
-                dataKey={series}
+                key={movementType}
+                dataKey={movementType}
                 stackId="movements"
                 fill={`var(--color-${series})`}
                 // 2px surface gap between stacked segments.
@@ -118,13 +126,14 @@ export function MovementsByTypeChart({
                 shape={(props: BarShapeProps) => (
                   <Rectangle
                     {...props}
-                    radius={topSeriesOf(props.payload) === series ? [6, 6, 0, 0] : 0}
+                    radius={topSeriesOf(series, props.payload) === movementType ? [6, 6, 0, 0] : 0}
                   />
                 )}
               />
             ))}
           </BarChart>
         </ChartContainer>
+        )}
       </CardContent>
     </Card>
   );

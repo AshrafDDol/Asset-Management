@@ -13,8 +13,8 @@ async function main() {
   const role = await prisma.role.findFirstOrThrow({ where: { isActive: true } });
   const user = await prisma.user.create({ data: { username: `variable-epc-${suffix}`, fullName: 'Variable EPC Runtime', email: `variable-epc-${suffix}@example.test`, passwordHash: 'runtime-only', roleId: role.id } }); userId = user.id;
   const category = await prisma.assetCategory.create({ data: { categoryCode: `VE${suffix.slice(-8)}`, name: 'Variable EPC Runtime' } }); categoryId = category.id;
-  const location = await prisma.location.create({ data: { locationCode: `VEH${suffix.slice(-7)}`, name: 'Variable EPC Rack', locationType: 'RACK' } }); locationId = location.id;
-  const destination = await prisma.location.create({ data: { locationCode: `VED${suffix.slice(-7)}`, name: 'Variable EPC Destination', locationType: 'PRODUCTION_AREA' } }); destinationId = destination.id;
+  const location = await prisma.location.create({ data: { locationCode: `VEH${suffix.slice(-7)}`, name: 'Variable EPC Rack', locationType: 'STORAGE' } }); locationId = location.id;
+  const destination = await prisma.location.create({ data: { locationCode: `VED${suffix.slice(-7)}`, name: 'Variable EPC Destination', locationType: 'OPERATION' } }); destinationId = destination.id;
   assert.deepEqual(REQUIRED_EXAMPLES.map(validateNewEpcCode), REQUIRED_EXAMPLES);
   for (const [index, epcCode] of EPC_CASES.entries()) {
     const asset = await createAsset({ assetCode: `VE-${suffix}-${index}`, itemName: `Variable EPC ${epcCode.length}`, categoryId, locationId, epcCode: `  ${epcCode.toLowerCase()}  ` });

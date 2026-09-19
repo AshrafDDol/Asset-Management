@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { Plus, RefreshCw } from "lucide-react";
+import { ChevronDown, Plus, RefreshCw } from "lucide-react";
 import { assignOrReplaceAssetEpcApi, type Asset } from "../api/assets.api";
 import { DatePicker } from "@/components/common/DatePicker";
 import { useErrorToast } from "@/hooks/useErrorToast";
@@ -11,8 +11,14 @@ import { ORDER_OPTIONS, SelectField } from "@/components/common/SelectField";
 import { TableCard } from "@/components/common/TableCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -48,7 +54,7 @@ import { chronological, type ListOrder } from "../utils/listOrder";
 import { locationDisplayName } from "../utils/locationDisplay";
 import { AssetColumnSelector } from "../components/AssetColumnSelector";
 import { AssetDetailsModal } from "../components/AssetDetailsModal";
-import { cancelRepairTaskApi, getRepairsApi, prepareCompleteRepairApi, prepareStartRepairApi, type AssetRepair } from "../api/repairs.api";
+import { getRepairsApi, prepareCompleteRepairApi, prepareStartRepairApi, type AssetRepair } from "../api/repairs.api";
 import {
   displayValue,
   formatBladeDetails,
@@ -76,12 +82,13 @@ const apiError = (error: unknown) =>
   "Failed to save EPC.";
 const operational = (location: Location) =>
   !!location.isActive &&
-  ["PRODUCTION_AREA", "MACHINE_LOCATION"].includes(location.locationType);
+  location.locationType === "OPERATION";
 const storageLocation = (location: Location) =>
   !!location.isActive &&
-  ["STORE", "WAREHOUSE", "RACK", "LEVEL", "BIN", "FILE"].includes(
-    location.locationType
-  );
+  location.locationType === "STORAGE";
+const repairLocation = (location: Location) =>
+  !!location.isActive &&
+  location.locationType === "REPAIR";
 const ASSET_COLUMNS_KEY = "ims-assets-table-columns";
 const assetColumnLabel = new Map(
   ASSET_COLUMN_OPTIONS.map((option) => [option.id, option.label])
@@ -451,6 +458,7 @@ function PrepareIssueDialog({
                 selectedLocationId={destination}
                 onChange={(id) => apply("destination", String(id))}
                 allowedLocation={operational}
+                pruneToAllowed
                 placeholder="Not set"
               />
             </Field>
@@ -537,6 +545,7 @@ function PrepareIssueDialog({
                           })
                         }
                         allowedLocation={operational}
+                        pruneToAllowed
                         placeholder="Not set yet"
                       />
                     </TableCell>
@@ -893,19 +902,15 @@ function PrepareRepairDialog({ asset, repair, locations, close, complete }: { as
             />
           </Field>
 
-          <Field label="Repair Location" htmlFor="repair-location">
-            <SelectField
-              id="repair-location"
-              value={repairLocationId}
-              onChange={setRepairLocationId}
+          <Field label="Repair Location">
+            <LocationTreeSelect
+              locations={locations}
+              selectedLocationId={repairLocationId}
+              onChange={(id) => setRepairLocationId(String(id))}
               disabled={completing}
               placeholder="Select Repair Location"
-              options={locations
-                .filter(location => location.isActive !== false)
-                .map(location => ({
-                  value: String(location.id),
-                  label: `${location.name} (${location.locationCode})`,
-                }))}
+              allowedLocation={repairLocation}
+              pruneToAllowed
             />
           </Field>
 
@@ -1143,6 +1148,31 @@ export function AssetsPages() {
   const editingAsset = assets.find((asset) => asset.id === editingAssetId);
   const activeRepairByAsset = new Map(repairs.filter(repair => repair.status === "IN_PROGRESS").map(repair => [repair.asset.id, repair]));
   const pendingRepairByAsset = new Map(repairs.flatMap(repair => repair.tasks.filter(task => task.status === "PENDING").map(task => [repair.asset.id, task] as const)));
+  const selectionEligibility = (asset: Asset) => {
+    if (asset.status === "AVAILABLE") return eligibility(asset);
+    if (asset.status === "UNDER_REPAIR") {
+      if (asset.isActive === false) return "Asset is inactive";
+      if (!hasActiveEpc(asset)) return "Active EPC is missing";
+      if (!activeRepairByAsset.has(asset.id)) return "Active Repair is unresolved";
+      if (pendingRepairByAsset.has(asset.id)) return "Repair action is already prepared";
+      return "";
+    }
+    return `Status is ${asset.status}`;
+  };
+  const eligibleVisible = visible.filter((asset) => !selectionEligibility(asset));
+  const selectedEligibleVisible = eligibleVisible.filter((asset) => selected.has(asset.id));
+  const allEligibleVisibleSelected = eligibleVisible.length > 0 && selectedEligibleVisible.length === eligibleVisible.length;
+  const someEligibleVisibleSelected = selectedEligibleVisible.length > 0 && !allEligibleVisibleSelected;
+  const selectedAvailable = selectedAssets.length > 0 && selectedAssets.every((asset) => asset.status === "AVAILABLE");
+  const selectedUnderRepair = selectedAssets.length > 0 && selectedAssets.every((asset) => asset.status === "UNDER_REPAIR");
+  const mixedPreparationState = selectedAssets.length > 0 && !selectedAvailable && !selectedUnderRepair;
+  const unsupportedRepairBatch = selectedUnderRepair && selectedAssets.length !== 1;
+  const prepareDisabled = !selectedAssets.length || mixedPreparationState || unsupportedRepairBatch;
+  const prepareTitle = mixedPreparationState
+    ? "Selected assets must have the same preparation state."
+    : unsupportedRepairBatch
+      ? "Select exactly one Asset to prepare Repair completion."
+      : undefined;
   const loadRepairs = async () => { try { setRepairError(""); setRepairs(await getRepairsApi()); } catch (caught) { setRepairError(apiError(caught)); } };
   useEffect(() => {
     // Asset master data uses mount-time loading.
@@ -1235,29 +1265,10 @@ export function AssetsPages() {
             >
               Edit
             </Button>
-            {(asset.status === "AVAILABLE" || asset.status === "UNDER_REPAIR") && (
-              <Button
-                variant="ghost"
-                size="sm"
-                type="button"
-                disabled={pendingRepairByAsset.has(asset.id)}
-                onClick={() => setRepairAsset(asset)}
-              >
-                {pendingRepairByAsset.has(asset.id)
-                  ? "Repair Prepared"
-                  : asset.status === "UNDER_REPAIR"
-                    ? "Prepare Complete Repair"
-                    : "Prepare Repair"}
-              </Button>
-            )}
           </div>
         );
     }
   };
-
-  const pendingRepairTasks = repairs.flatMap((repair) =>
-    repair.tasks.filter((task) => task.status === "PENDING").map((task) => ({ repair, task }))
-  );
 
   return (
     <>
@@ -1266,6 +1277,41 @@ export function AssetsPages() {
         description="Manage and prepare Assets for issue."
         actions={
           <>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button disabled={prepareDisabled} title={prepareTitle}>
+                  <Plus />
+                  Prepare Asset{selected.size ? ` (${selected.size})` : ""}
+                  <ChevronDown />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {selectedAvailable && (
+                  <DropdownMenuItem onSelect={() => setPreparing(true)}>
+                    Prepare for Operation
+                  </DropdownMenuItem>
+                )}
+                {selectedAvailable && selectedAssets.length === 1 && (
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      const asset = selectedAssets[0];
+                      if (pendingRepairByAsset.has(asset.id) || activeRepairByAsset.has(asset.id)) {
+                        toast.error("The selected Asset already has active Repair work.");
+                        return;
+                      }
+                      setRepairAsset(asset);
+                    }}
+                  >
+                    Prepare for Repair
+                  </DropdownMenuItem>
+                )}
+                {selectedUnderRepair && selectedAssets.length === 1 && (
+                  <DropdownMenuItem onSelect={() => setRepairAsset(selectedAssets[0])}>
+                    Prepare Complete Repair
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button
               onClick={() => {
                 handleCancelEdit();
@@ -1287,56 +1333,6 @@ export function AssetsPages() {
       <ErrorBox message={repairError} />
       {createdEpc && (
         <SuccessBox message={`Asset registered successfully. Generated EPC: ${createdEpc}`} />
-      )}
-
-      {pendingRepairTasks.length > 0 && (
-        <Card className="overflow-hidden">
-          <CardHeader>
-            <CardTitle className="text-base">Pending Repair Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="px-0">
-            <div className="overflow-x-auto border-t">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Asset</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead>Repair Location</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pendingRepairTasks.map(({ repair, task }) => (
-                    <TableRow key={task.id}>
-                      <TableCell className="font-mono text-xs">{repair.asset.assetCode}</TableCell>
-                      <TableCell>{task.action.replaceAll("_", " ")}</TableCell>
-                      <TableCell>{repair.repairLocation.name}</TableCell>
-                      <TableCell className="text-muted-foreground">{repair.reason}</TableCell>
-                      <TableCell>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={async () => {
-                            try {
-                              await cancelRepairTaskApi(task.id);
-                              await loadRepairs();
-                              toast.success("Repair task cancelled.");
-                            } catch (caught) {
-                              setRepairError(apiError(caught));
-                            }
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
       )}
 
       <Card>
@@ -1505,31 +1501,6 @@ export function AssetsPages() {
               />
             </Field>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-3">
-          <span className="text-sm font-medium">{selected.size} selected</span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!visible.some((a) => !eligibility(a))}
-            onClick={() =>
-              setSelected(
-                (old) =>
-                  new Set([...old, ...visible.filter((a) => !eligibility(a)).map((a) => a.id)])
-              )
-            }
-          >
-            Select eligible visible rows
-          </Button>
-          <Button variant="outline" size="sm" disabled={!selected.size} onClick={() => setSelected(new Set())}>
-            Clear selection
-          </Button>
-          <Button className="ml-auto" disabled={!selected.size} onClick={() => setPreparing(true)}>
-            Prepare Issue
-          </Button>
         </CardContent>
       </Card>
 
@@ -1932,6 +1903,13 @@ export function AssetsPages() {
           locations={locations}
           close={() => setRepairAsset(null)}
           complete={async () => {
+            const preparedAssetId = repairAsset.id;
+            setSelected((current) => {
+              const next = new Set(current);
+              next.delete(preparedAssetId);
+              return next;
+            });
+            setRepairAsset(null);
             await Promise.all([loadPageData(), loadRepairs()]);
           }}
         />
@@ -1969,7 +1947,25 @@ export function AssetsPages() {
       </div>
 
       <TableCard
-        columns={["Select", ...columns.map((column) => assetColumnLabel.get(column) ?? column)]}
+        columns={[
+          <div key="select" className="flex items-center gap-2">
+            <Checkbox
+              aria-label="Select all eligible filtered Assets"
+              checked={someEligibleVisibleSelected ? "indeterminate" : allEligibleVisibleSelected}
+              disabled={!eligibleVisible.length}
+              onCheckedChange={(checked) =>
+                setSelected((current) => {
+                  const next = new Set(current);
+                  if (checked === true) eligibleVisible.forEach((asset) => next.add(asset.id));
+                  else eligibleVisible.forEach((asset) => next.delete(asset.id));
+                  return next;
+                })
+              }
+            />
+            <span>Select</span>
+          </div>,
+          ...columns.map((column) => assetColumnLabel.get(column) ?? column),
+        ]}
         loading={loading}
         isEmpty={visible.length === 0}
         emptyMessage="No assets found."
@@ -1980,8 +1976,8 @@ export function AssetsPages() {
             <TableCell>
               <Checkbox
                 checked={selected.has(asset.id)}
-                disabled={!!eligibility(asset)}
-                title={eligibility(asset) || "Eligible for Issue preparation"}
+                disabled={!selected.has(asset.id) && !!selectionEligibility(asset)}
+                title={selectionEligibility(asset) || "Eligible for Asset preparation"}
                 onCheckedChange={(checked) =>
                   setSelected((old) => {
                     const next = new Set(old);
@@ -1999,7 +1995,11 @@ export function AssetsPages() {
         ))}
       </TableCard>
 
-      <AssetDetailsModal asset={viewAsset} close={() => setViewAsset(null)} />
+      <AssetDetailsModal
+        asset={viewAsset}
+        repairs={viewAsset ? repairs.filter((repair) => repair.asset.id === viewAsset.id && ["IN_PROGRESS", "COMPLETED"].includes(repair.status)) : []}
+        close={() => setViewAsset(null)}
+      />
 
       {epcAsset && (
         <AssetEpcDialog asset={epcAsset} close={() => setEpcAsset(null)} refresh={loadPageData} />
@@ -2012,7 +2012,12 @@ export function AssetsPages() {
           close={() => setPreparing(false)}
           complete={async (count, message) => {
             setPreparing(false);
-            setSelected(new Set());
+            const preparedAssetIds = new Set(selectedAssets.map((asset) => asset.id));
+            setSelected((current) => {
+              const next = new Set(current);
+              preparedAssetIds.forEach((id) => next.delete(id));
+              return next;
+            });
             navigate("/issue-batches", {
               state: {
                 message: message || `${count} Assets prepared. Awaiting EPC confirmation.`,

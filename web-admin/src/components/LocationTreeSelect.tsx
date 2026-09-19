@@ -15,22 +15,56 @@ type LocationTreeSelectProps = {
   required?: boolean;
   placeholder?: string;
   allowedLocation?: (location: Location) => boolean;
+  pruneToAllowed?: boolean;
   allowClear?: boolean;
   clearLabel?: string;
   onClear?: () => void;
 };
 
-export function LocationTreeSelect({ locations, selectedLocationId, onChange, disabled, required, placeholder = "Select Location", allowedLocation, allowClear = false, clearLabel = "Clear Selection", onClear }: LocationTreeSelectProps) {
+export function LocationTreeSelect({ locations, selectedLocationId, onChange, disabled, required, placeholder = "Select Location", allowedLocation, pruneToAllowed = false, allowClear = false, clearLabel = "Clear Selection", onClear }: LocationTreeSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
   const selected = locations.find((location) => String(location.id) === String(selectedLocationId ?? ""));
+  const locationById = useMemo(
+    () => new Map(locations.map((location) => [location.id, location])),
+    [locations]
+  );
+  const visibleLocations = useMemo(() => {
+    if (!pruneToAllowed || !allowedLocation) return locations;
 
-  // Searching drops the hierarchy and shows a flat list of matches, which is far
-  // easier to scan than auto-expanding branches.
+    const visibleIds = new Set<number>();
+    locations.filter(allowedLocation).forEach((location) => {
+      let current: Location | undefined = location;
+      const branchIds = new Set<number>();
+      while (current && !branchIds.has(current.id)) {
+        visibleIds.add(current.id);
+        branchIds.add(current.id);
+        current = current.parentLocationId
+          ? locationById.get(current.parentLocationId)
+          : undefined;
+      }
+    });
+    return locations.filter((location) => visibleIds.has(location.id));
+  }, [allowedLocation, locationById, locations, pruneToAllowed]);
+  const locationPath = (location: Location) => {
+    const names: string[] = [];
+    const visited = new Set<number>();
+    let current: Location | undefined = location;
+    while (current && !visited.has(current.id)) {
+      names.unshift(current.name);
+      visited.add(current.id);
+      current = current.parentLocationId
+        ? locationById.get(current.parentLocationId)
+        : undefined;
+    }
+    return names.join(" / ");
+  };
+
+  // Search results stay compact while their path preserves hierarchy context.
   const query = search.trim().toLowerCase();
   const matches = query
-    ? locations.filter(
+    ? visibleLocations.filter(
         (location) =>
           location.name.toLowerCase().includes(query) ||
           location.locationCode.toLowerCase().includes(query)
@@ -38,10 +72,10 @@ export function LocationTreeSelect({ locations, selectedLocationId, onChange, di
     : [];
   const children = useMemo(() => {
     const result = new Map<number | null, Location[]>();
-    locations.forEach((location) => result.set(location.parentLocationId ?? null, [...(result.get(location.parentLocationId ?? null) || []), location]));
+    visibleLocations.forEach((location) => result.set(location.parentLocationId ?? null, [...(result.get(location.parentLocationId ?? null) || []), location]));
     result.forEach((items) => items.sort((left, right) => left.name.localeCompare(right.name)));
     return result;
-  }, [locations]);
+  }, [visibleLocations]);
   const toggle = (id: number) => setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
   const renderNodes = (parentId: number | null, depth: number): ReactNode =>
@@ -153,7 +187,7 @@ export function LocationTreeSelect({ locations, selectedLocationId, onChange, di
                     }`}
                     onClick={() => { onChange(location.id); setOpen(false); }}
                   >
-                    <div className="text-sm">{locationDisplayName(location)}</div>
+                    <div className="text-sm">{locationPath(location)}</div>
                     <div className="text-xs text-muted-foreground">
                       {location.locationCode} · {location.locationType.replaceAll("_", " ")}
                     </div>

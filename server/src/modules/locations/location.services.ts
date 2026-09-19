@@ -112,7 +112,7 @@ export async function createLocation(input: CreateLocationInput) {
       description: input.description?.trim() || null,
       parentLocationId: input.parentLocationId ?? null,
       departmentId: input.departmentId ?? null,
-      locationType: validateLocationType(input.locationType) || LocationType.OTHER,
+      locationType: validateLocationType(input.locationType) || LocationType.STORAGE,
     },
     include: LOCATION_INCLUDE,
   });

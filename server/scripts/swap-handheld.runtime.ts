@@ -12,8 +12,8 @@ async function main() {
   const role = await prisma.role.findFirstOrThrow({ where: { isActive: true } });
   const user = await prisma.user.create({ data: { username: `swap-proof-${suffix}`, fullName: "Swap Proof Runtime", email: `swap-proof-${suffix}@example.test`, passwordHash: "runtime-only", roleId: role.id } }); userId = user.id;
   const category = await prisma.assetCategory.create({ data: { categoryCode: `SH${suffix.slice(-8)}`, name: `Swap Proof ${suffix}` } }); categoryId = category.id;
-  const home = await prisma.location.create({ data: { locationCode: `SHH${suffix.slice(-7)}`, name: "Swap Home", locationType: "BIN" } }); locationIds.push(home.id);
-  const operation = await prisma.location.create({ data: { locationCode: `SHO${suffix.slice(-7)}`, name: "Swap Operation", locationType: "PRODUCTION_AREA" } }); locationIds.push(operation.id);
+  const home = await prisma.location.create({ data: { locationCode: `SHH${suffix.slice(-7)}`, name: "Swap Home", locationType: "STORAGE" } }); locationIds.push(home.id);
+  const operation = await prisma.location.create({ data: { locationCode: `SHO${suffix.slice(-7)}`, name: "Swap Operation", locationType: "OPERATION" } }); locationIds.push(operation.id);
   const assets: Awaited<ReturnType<typeof createAsset>>[] = [];
   for (let index = 0; index < 10; index += 1) { const asset = await createAsset({ assetCode: `SH-${suffix}-${index}`, itemName: `Swap ${index}`, categoryId, locationId: home.id, autoGenerateEpc: true }); assets.push(asset); assetIds.push(asset.id); }
   const makeTask = async (sourceIndex: number, replacementIndex: number, label: string, verifyOldBeforeCreate = false) => {

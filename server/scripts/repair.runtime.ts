@@ -12,9 +12,9 @@ async function main() {
   const role = await prisma.role.findFirstOrThrow({ where: { isActive: true } });
   const user = await prisma.user.create({ data: { username: `repair-${suffix}`, fullName: 'Repair Runtime', email: `repair-${suffix}@example.test`, passwordHash: 'runtime-only', roleId: role.id } }); userId = user.id;
   const category = await prisma.assetCategory.create({ data: { categoryCode: `RP${suffix.slice(-8)}`, name: 'Repair Runtime' } }); categoryId = category.id;
-  const home = await prisma.location.create({ data: { locationCode: `RPH${suffix.slice(-7)}`, name: 'Repair Home', locationType: 'RACK' } }); locationIds.push(home.id);
-  const repairLocation = await prisma.location.create({ data: { locationCode: `RPR${suffix.slice(-7)}`, name: 'Repair Workshop', locationType: 'OTHER' } }); locationIds.push(repairLocation.id);
-  const operation = await prisma.location.create({ data: { locationCode: `RPO${suffix.slice(-7)}`, name: 'Repair Operation', locationType: 'PRODUCTION_AREA' } }); locationIds.push(operation.id);
+  const home = await prisma.location.create({ data: { locationCode: `RPH${suffix.slice(-7)}`, name: 'Repair Home', locationType: 'STORAGE' } }); locationIds.push(home.id);
+  const repairLocation = await prisma.location.create({ data: { locationCode: `RPR${suffix.slice(-7)}`, name: 'Repair Workshop', locationType: 'REPAIR' } }); locationIds.push(repairLocation.id);
+  const operation = await prisma.location.create({ data: { locationCode: `RPO${suffix.slice(-7)}`, name: 'Repair Operation', locationType: 'OPERATION' } }); locationIds.push(operation.id);
   const assets = [];
   for (let index = 0; index < 4; index += 1) { const asset = await createAsset({ assetCode: `RP-${suffix}-${index}`, itemName: `Repair Asset ${index}`, categoryId, locationId: home.id, epcCode: `AA${suffix}${index}`.padEnd(16, '0').slice(0, 16) }); assets.push(asset); assetIds.push(asset.id); }
   const [staleAsset, repairAsset, inUseAsset, cancelAsset] = assets;
@@ -27,14 +27,21 @@ async function main() {
 
   const cancelledTask = await prepareStartRepair({ assetId: cancelAsset.id, reason: 'Cancellation', repairLocationId: repairLocation.id }, userId); repairIds.push(cancelledTask.repairId);
   const cancelBefore = await prisma.asset.findUniqueOrThrow({ where: { id: cancelAsset.id } }); await cancelRepairTask(cancelledTask.id, userId); const cancelAfter = await prisma.asset.findUniqueOrThrow({ where: { id: cancelAsset.id } }); assert.deepEqual({ status: cancelAfter.status, locationId: cancelAfter.locationId }, { status: cancelBefore.status, locationId: cancelBefore.locationId });
+  assert.equal(await prisma.assetMovement.count({ where: { assetId: cancelAsset.id } }), 0);
 
   const startTask = await prepareStartRepair({ assetId: repairAsset.id, reason: 'Blade inspection', repairLocationId: repairLocation.id, remarks: 'POC repair' }, userId); repairIds.push(startTask.repairId);
   const prepared = await prisma.asset.findUniqueOrThrow({ where: { id: repairAsset.id } }); assert.equal(prepared.status, 'AVAILABLE'); assert.equal(prepared.locationId, home.id);
+  assert.equal(await prisma.assetMovement.count({ where: { assetId: repairAsset.id } }), 0);
   await assert.rejects(() => confirmRepairTask(startTask.id, { epc: inUseAsset.epc!.epcCode }, userId), /no longer matches/);
   assert.deepEqual({ status: (await prisma.asset.findUniqueOrThrow({ where: { id: repairAsset.id } })).status, task: (await prisma.repairTask.findUniqueOrThrow({ where: { id: startTask.id } })).status }, { status: 'AVAILABLE', task: 'PENDING' });
+  assert.equal(await prisma.assetMovement.count({ where: { assetId: repairAsset.id } }), 0);
   const started = await confirmRepairTask(startTask.id, { epc: ` ${repairAsset.epc!.epcCode.toLowerCase()} ` }, userId);
   assert.equal(started.status, 'IN_PROGRESS'); assert.ok(started.startedAt); assert.equal(started.startedByUserId, userId);
   current = await prisma.asset.findUniqueOrThrow({ where: { id: repairAsset.id } }); assert.equal(current.status, 'UNDER_REPAIR'); assert.equal(current.locationId, repairLocation.id);
+  let repairMovements = await prisma.assetMovement.findMany({ where: { assetId: repairAsset.id, movementType: 'REPAIR_TRANSFER' }, orderBy: { movementDate: 'asc' } });
+  assert.equal(repairMovements.length, 1); assert.deepEqual({ from: repairMovements[0].fromLocationId, to: repairMovements[0].toLocationId, user: repairMovements[0].movedByUserId }, { from: home.id, to: repairLocation.id, user: userId }); assert.equal(repairMovements[0].movementDate.getTime(), started.startedAt!.getTime());
+  await assert.rejects(() => confirmRepairTask(startTask.id, { epc: repairAsset.epc!.epcCode }, userId), /no longer pending/i);
+  assert.equal(await prisma.assetMovement.count({ where: { assetId: repairAsset.id, movementType: 'REPAIR_TRANSFER' } }), 1);
   await assert.rejects(() => createIssueBatch({ assetIds: [repairAsset.id], jobNo: `REPAIR-BLOCK-${suffix}`, defaultRecipientUserId: userId, defaultToLocationId: operation.id }, userId), /not eligible/);
 
   const inUseBatch = await createIssueBatch({ assetIds: [inUseAsset.id], jobNo: `REPAIR-SWAP-${suffix}`, defaultRecipientUserId: userId, defaultToLocationId: operation.id }, userId); batchIds.push(inUseBatch.id);
@@ -43,11 +50,16 @@ async function main() {
 
   const completeTask = await prepareCompleteRepair(started.id, userId);
   current = await prisma.asset.findUniqueOrThrow({ where: { id: repairAsset.id } }); assert.equal(current.status, 'UNDER_REPAIR'); assert.equal(current.locationId, repairLocation.id);
+  assert.equal(await prisma.assetMovement.count({ where: { assetId: repairAsset.id, movementType: 'REPAIR_TRANSFER' } }), 1);
   const completed = await confirmRepairTask(completeTask.id, { epc: repairAsset.epc!.epcCode, completionRemarks: 'Passed inspection' }, userId);
   assert.equal(completed.status, 'COMPLETED'); assert.ok(completed.completedAt); assert.ok(completed.startedAt); assert.equal(completed.completedByUserId, userId); assert.equal(completed.completionRemarks, 'Passed inspection'); assert.equal(completed.durationMs, completed.completedAt!.getTime() - completed.startedAt!.getTime());
   current = await prisma.asset.findUniqueOrThrow({ where: { id: repairAsset.id } }); assert.equal(current.status, 'AVAILABLE'); assert.equal(current.locationId, home.id);
+  repairMovements = await prisma.assetMovement.findMany({ where: { assetId: repairAsset.id, movementType: 'REPAIR_TRANSFER' }, orderBy: { movementDate: 'asc' } });
+  assert.equal(repairMovements.length, 2); assert.deepEqual({ from: repairMovements[1].fromLocationId, to: repairMovements[1].toLocationId, user: repairMovements[1].movedByUserId }, { from: repairLocation.id, to: home.id, user: userId }); assert.equal(repairMovements[1].movementDate.getTime(), completed.completedAt!.getTime());
+  await assert.rejects(() => confirmRepairTask(completeTask.id, { epc: repairAsset.epc!.epcCode }, userId), /no longer pending/i);
+  assert.equal(await prisma.assetMovement.count({ where: { assetId: repairAsset.id, movementType: 'REPAIR_TRANSFER' } }), 2);
   assert.equal(await prisma.assetAssignment.count({ where: { assetId: repairAsset.id } }), 0); assert.equal(await prisma.issueBatchItem.count({ where: { assetId: repairAsset.id } }), 0);
-  console.log(JSON.stringify({ passed: true, preparationNonMutating: true, issueBeforeStartAllowed: true, staleStartRejected: true, wrongEpcNonMutating: true, startRepair: true, underRepairIssueBlocked: true, underRepairSwapReplacementBlocked: true, completePreparationNonMutating: true, completeRepair: true, durationFromTimestamps: true, pendingCancellationNonMutating: true }, null, 2));
+  console.log(JSON.stringify({ passed: true, preparationNonMutating: true, issueBeforeStartAllowed: true, staleStartRejected: true, wrongEpcNonMutating: true, startRepair: true, startRepairMovement: true, duplicateStartMovementPrevented: true, underRepairIssueBlocked: true, underRepairSwapReplacementBlocked: true, completePreparationNonMutating: true, completeRepair: true, completeRepairMovement: true, duplicateCompleteMovementPrevented: true, durationFromTimestamps: true, pendingCancellationNonMutating: true, cancelledTaskCreatesNoMovement: true }, null, 2));
 }
 main().finally(async () => {
   try {

@@ -1,4 +1,5 @@
 import type { Asset } from "../api/assets.api";
+import type { AssetRepair } from "../api/repairs.api";
 import { displayValue, formatBladeDetails, formatGap, formatMeasurement, formatPurchaseDate, formatRadius } from "../utils/assetDisplay";
 import { locationDisplayName } from "../utils/locationDisplay";
 import {
@@ -24,7 +25,18 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
   </section>
 );
 
-export function AssetDetailsModal({ asset, close }: { asset: Asset | null; close: () => void }) {
+const formatDateTime = (value?: string | null) => value ? new Date(value).toLocaleString() : null;
+const formatDuration = (durationMs?: number | null) => {
+  if (durationMs == null) return null;
+  const minutes = Math.max(0, Math.floor(durationMs / 60000));
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  const remainingMinutes = minutes % 60;
+  return [days ? `${days}d` : "", hours ? `${hours}h` : "", `${remainingMinutes}m`].filter(Boolean).join(" ");
+};
+const friendly = (value: string) => value.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+export function AssetDetailsModal({ asset, repairs = [], close }: { asset: Asset | null; repairs?: AssetRepair[]; close: () => void }) {
   return (
     <Dialog open={!!asset} onOpenChange={(open) => { if (!open) close(); }}>
       <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
@@ -58,6 +70,31 @@ export function AssetDetailsModal({ asset, close }: { asset: Asset | null; close
                 <DetailField label="Current Location" value={locationDisplayName(asset.location)} />
                 <DetailField label="Storage Location" value={locationDisplayName(asset.homeLocation)} />
               </Section>
+
+              {repairs.length > 0 && (
+                <>
+                  <Separator />
+
+                  <section className="space-y-3">
+                    <h4 className="text-sm font-semibold">Repair History</h4>
+                    <div className="max-h-80 space-y-3 overflow-y-auto pr-2">
+                      {repairs.map((repair) => (
+                        <div key={repair.id} className="rounded-lg border p-4">
+                          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                            <DetailField label="Repair Status" value={friendly(repair.status)} />
+                            <DetailField label="Repair Location" value={`${repair.repairLocation.name} (${repair.repairLocation.locationCode})`} />
+                            <DetailField label="Repair Duration" value={formatDuration(repair.durationMs)} />
+                            <DetailField label="Repair Started" value={formatDateTime(repair.startedAt)} />
+                            <DetailField label="Repair Completed" value={formatDateTime(repair.completedAt)} />
+                            <DetailField label="Reason" value={repair.reason} />
+                            <DetailField label="Completion Remarks" value={repair.completionRemarks} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </>
+              )}
 
               <Separator />
 

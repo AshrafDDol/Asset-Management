@@ -1,0 +1,7 @@
+ALTER TABLE `asset_movements`
+  MODIFY `movement_type` ENUM(
+    'LOCATION_TRANSFER',
+    'DEPARTMENT_TRANSFER',
+    'FULL_TRANSFER',
+    'REPAIR_TRANSFER'
+  ) NOT NULL;

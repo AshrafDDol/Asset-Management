@@ -11,8 +11,8 @@ async function main() {
   const role = await prisma.role.findFirstOrThrow({ where: { isActive: true } });
   const user = await prisma.user.create({ data: { username: `stock-take-${suffix}`, fullName: 'Stock Take Runtime', email: `stock-take-${suffix}@example.test`, passwordHash: 'runtime-only', roleId: role.id } }); userId = user.id;
   const category = await prisma.assetCategory.create({ data: { categoryCode: `ST${suffix.slice(-8)}`, name: 'Stock Take Runtime' } }); categoryId = category.id;
-  const home = await prisma.location.create({ data: { locationCode: `STH${suffix.slice(-7)}`, name: 'Stock Take Rack', locationType: 'RACK' } }); locationIds.push(home.id);
-  const production = await prisma.location.create({ data: { locationCode: `STP${suffix.slice(-7)}`, name: 'Stock Take Production', locationType: 'PRODUCTION_AREA' } }); locationIds.push(production.id);
+  const home = await prisma.location.create({ data: { locationCode: `STH${suffix.slice(-7)}`, name: 'Stock Take Rack', locationType: 'STORAGE' } }); locationIds.push(home.id);
+  const production = await prisma.location.create({ data: { locationCode: `STP${suffix.slice(-7)}`, name: 'Stock Take Production', locationType: 'OPERATION' } }); locationIds.push(production.id);
   const asset = await createAsset({ assetCode: `ST-${suffix}`, itemName: 'Counted Asset', categoryId, locationId: home.id, autoGenerateEpc: true }); assetIds.push(asset.id);
   const before = await prisma.asset.findUniqueOrThrow({ where: { id: asset.id } });
   const lifecycleBefore = { assignments: await prisma.assetAssignment.count({ where: { assetId: asset.id } }), items: await prisma.issueBatchItem.count({ where: { assetId: asset.id } }), movements: await prisma.assetMovement.count({ where: { assetId: asset.id } }), swaps: await prisma.handheldSwapTask.count({ where: { replacementAssetId: asset.id } }) };

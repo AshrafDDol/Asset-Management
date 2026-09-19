@@ -26,7 +26,7 @@ async function run() {
     data: {
       locationCode: `BL${suffix}`,
       name: `Blade Store ${suffix}`,
-      locationType: LocationType.STORE,
+      locationType: LocationType.STORAGE,
       departmentId: department.id,
     },
   });

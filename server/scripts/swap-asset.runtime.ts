@@ -12,8 +12,8 @@ async function main() {
   const role = await prisma.role.findFirstOrThrow({ where: { isActive: true } });
   const user = await prisma.user.create({ data: { username: `swap-${suffix}`, fullName: "Swap Runtime", email: `swap-${suffix}@example.test`, passwordHash: "runtime-only", roleId: role.id } }); userId = user.id;
   const category = await prisma.assetCategory.create({ data: { categoryCode: `SW${suffix.slice(-8)}`, name: `Swap ${suffix}` } }); categoryId = category.id;
-  const home = await prisma.location.create({ data: { locationCode: `SWH${suffix.slice(-8)}`, name: "Swap Home", locationType: "BIN" } }); locationIds.push(home.id);
-  const operation = await prisma.location.create({ data: { locationCode: `SWO${suffix.slice(-8)}`, name: "Swap Operation", locationType: "PRODUCTION_AREA" } }); locationIds.push(operation.id);
+  const home = await prisma.location.create({ data: { locationCode: `SWH${suffix.slice(-8)}`, name: "Swap Home", locationType: "STORAGE" } }); locationIds.push(home.id);
+  const operation = await prisma.location.create({ data: { locationCode: `SWO${suffix.slice(-8)}`, name: "Swap Operation", locationType: "OPERATION" } }); locationIds.push(operation.id);
   const assets: Awaited<ReturnType<typeof createAsset>>[] = [];
   for (let n = 1; n <= 7; n += 1) { const asset = await createAsset({ assetCode: `SWAP-${suffix}-${n}`, itemName: `Swap Asset ${n}`, categoryId, locationId: home.id, autoGenerateEpc: true }); assets.push(asset); assetIds.push(asset.id); }
 

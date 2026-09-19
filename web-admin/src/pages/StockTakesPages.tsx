@@ -5,11 +5,11 @@ import { getAssetsApi, type Asset } from '../api/assets.api';
 import { getLocationsApi, type Location } from '../api/locations.api';
 import { cancelStockTakeApi, completeStockTakeApi, createStockTakeApi, getStockTakesApi, type StockTake } from '../api/stockTakes.api';
 import { DatePicker } from '@/components/common/DatePicker';
+import { LocationTreeSelect } from '@/components/LocationTreeSelect';
 import { useErrorToast } from '@/hooks/useErrorToast';
 import { ErrorBox } from '@/components/common/ErrorBox';
 import { Field } from '@/components/common/FilterCard';
 import { PageHeader } from '@/components/common/PageHeader';
-import { SelectField } from '@/components/common/SelectField';
 import { TableCard } from '@/components/common/TableCard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -133,13 +133,12 @@ export function StockTakesPages() {
 
             {step === 2 && (
               <div className="grid gap-4 sm:max-w-md">
-                <Field label="IMS Location" htmlFor="stock-take-location">
-                  <SelectField
-                    id="stock-take-location"
-                    value={form.locationId}
-                    onChange={value => setForm({ ...form, locationId: value })}
+                <Field label="Location">
+                  <LocationTreeSelect
+                    locations={locations}
+                    selectedLocationId={form.locationId}
+                    onChange={locationId => setForm({ ...form, locationId: String(locationId) })}
                     placeholder="Select Location"
-                    options={locations.map(location => ({ value: String(location.id), label: `${location.name} (${location.locationCode})` }))}
                   />
                 </Field>
               </div>

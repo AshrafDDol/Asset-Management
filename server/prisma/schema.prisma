@@ -20,15 +20,9 @@ enum AssetStatus {
 }
 
 enum LocationType {
-  STORE
-  WAREHOUSE
-  RACK
-  LEVEL
-  BIN
-  FILE
-  PRODUCTION_AREA
-  MACHINE_LOCATION
-  OTHER
+  STORAGE
+  OPERATION
+  REPAIR
 }
 
 enum AssetCondition {
@@ -57,6 +51,7 @@ enum MovementType {
   LOCATION_TRANSFER
   DEPARTMENT_TRANSFER
   FULL_TRANSFER
+  REPAIR_TRANSFER
 }
 
 enum IssueBatchStatus {
@@ -127,7 +122,7 @@ model Location {
   description         String?
   parentLocationId    Int?              @map("parent_location_id")
   departmentId        Int?              @map("department_id")
-  locationType        LocationType      @default(OTHER) @map("location_type")
+  locationType        LocationType      @default(STORAGE) @map("location_type")
   isActive            Boolean           @default(true) @map("is_active")
   createdAt           DateTime          @default(now()) @map("created_at")
   updatedAt           DateTime          @updatedAt @map("updated_at")

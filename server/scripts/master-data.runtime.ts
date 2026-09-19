@@ -24,9 +24,9 @@ async function run() {
   await updateRole(role.id, { description: "runtime edited" }); pass("Role register/edit");
   const department = await createDepartment({ departmentCode: `QD${suffix}`, name: `QA Department ${suffix}` }); ids.department = department.id;
   await updateDepartment(department.id, { name: `QA Department Edited ${suffix}` }); pass("Department register/edit");
-  const location = await createLocation({ locationCode: `QL${suffix}`, name: `QA Store ${suffix}`, locationType: LocationType.STORE, departmentId: department.id }); ids.location = location.id;
+  const location = await createLocation({ locationCode: `QL${suffix}`, name: `QA Store ${suffix}`, locationType: LocationType.STORAGE, departmentId: department.id }); ids.location = location.id;
   await updateLocation(location.id, { description: "runtime edited" }); pass("Location register/edit");
-  const child = await createLocation({ locationCode: `QC${suffix}`, name: `QA Child ${suffix}`, locationType: LocationType.BIN, parentLocationId: location.id }); ids.child = child.id;
+  const child = await createLocation({ locationCode: `QC${suffix}`, name: `QA Child ${suffix}`, locationType: LocationType.STORAGE, parentLocationId: location.id }); ids.child = child.id;
   const category = await createAssetCategory({ categoryCode: `QCAT${suffix}`, name: `QA Category ${suffix}` }); ids.category = category.id;
   await updateAssetCategory(category.id, { description: "runtime edited" }); pass("Category register/edit");
   const user = await createUser({ username: `qa_${suffix.toLowerCase()}`, fullName: "QA User", email: `qa_${suffix.toLowerCase()}@example.test`, password: "runtime123", roleId: role.id, departmentId: department.id }); ids.user = user.id;

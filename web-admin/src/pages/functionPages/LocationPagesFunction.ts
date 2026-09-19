@@ -20,7 +20,7 @@ const initialForm: LocationFormState = {
     description: "",
     parentLocationId: "",
     departmentId: "",
-    locationType: "OTHER",
+    locationType: "STORAGE",
     isActive: true,
 };
 
@@ -153,7 +153,7 @@ export function useLocationPagesFunction() {
                 description: location.description || "",
                 parentLocationId: location.parentLocationId ? String(location.parentLocationId) : "",
                 departmentId: location.departmentId ? String(location.departmentId) : "",
-                locationType: location.locationType || "OTHER",
+                locationType: location.locationType || "STORAGE",
                 isActive: location.isActive !== false,
             });
         },

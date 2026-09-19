@@ -1,7 +1,9 @@
-import { AssetRepairStatus, AssetStatus, EpcStatus, IssueBatchItemStatus, Prisma, RepairAction, RepairTaskStatus } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
+import { AssetRepairStatus, AssetStatus, EpcStatus, IssueBatchItemStatus, LocationType, MovementType, Prisma, RepairAction, RepairTaskStatus } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { AppError } from '../../utils/AppError';
 import { validateNewEpcCode } from '../asset-epcs/assetEpc.services';
+import { loadLocationHierarchy, resolveLocationDepartment } from '../locations/locationHierarchy';
 import { ConfirmRepairInput, PrepareStartRepairInput } from './repair.types';
 
 const validId = (value: unknown, label: string) => {
@@ -64,8 +66,8 @@ export async function prepareStartRepair(input: PrepareStartRepairInput, userId:
     if (!asset || !asset.isActive) throw new AppError('Asset not found or inactive', 404);
     if (asset.status !== AssetStatus.AVAILABLE) throw new AppError(`Start Repair can only be prepared for an AVAILABLE Asset; current status is ${asset.status}`, 409);
     if (!asset.epc?.isActive || asset.epc.status !== EpcStatus.ACTIVE) throw new AppError('Asset requires an active EPC before Repair can be prepared', 409);
-    const location = await tx.location.findUnique({ where: { id: repairLocationId }, select: { isActive: true } });
-    if (!location?.isActive) throw new AppError('Select an active Repair Location', 400);
+    const location = await tx.location.findUnique({ where: { id: repairLocationId }, select: { isActive: true, locationType: true } });
+    if (!location?.isActive || location.locationType !== LocationType.REPAIR) throw new AppError('Select an active Repair Location', 400);
     const existing = await tx.assetRepair.findFirst({ where: { assetId, status: { in: [AssetRepairStatus.PREPARED, AssetRepairStatus.IN_PROGRESS] } } });
     if (existing) throw new AppError('Asset already has a prepared or in-progress Repair', 409);
     const repair = await tx.assetRepair.create({ data: { assetId, repairLocationId, reason, remarks }, select: { id: true } });
@@ -113,6 +115,10 @@ export async function confirmRepairTask(taskValue: unknown, input: ConfirmRepair
       const repairChanged = await tx.assetRepair.updateMany({ where: { id: repair.id, status: AssetRepairStatus.PREPARED }, data: { status: AssetRepairStatus.IN_PROGRESS, startedAt: now, startedByUserId: userId } });
       const taskChanged = await tx.repairTask.updateMany({ where: { id: task.id, status: RepairTaskStatus.PENDING }, data: { status: RepairTaskStatus.CONFIRMED, confirmedAt: now, confirmedByUserId: userId } });
       if (assetChanged.count !== 1 || repairChanged.count !== 1 || taskChanged.count !== 1) throw new AppError('Repair conflicted with another action. Refresh the queue.', 409, 'CONFLICT');
+      const hierarchy = await loadLocationHierarchy(tx);
+      const fromDepartment = resolveLocationDepartment(asset.locationId, hierarchy);
+      const toDepartment = resolveLocationDepartment(repair.repairLocationId, hierarchy);
+      await tx.assetMovement.create({ data: { movementNo: `MOV-${randomUUID()}`, assetId: asset.id, fromDepartmentId: fromDepartment?.id ?? null, toDepartmentId: toDepartment?.id ?? null, fromLocationId: asset.locationId, toLocationId: repair.repairLocationId, movedByUserId: userId, movementType: MovementType.REPAIR_TRANSFER, movementDate: now, reason: 'REPAIR START CONFIRMED', remarks: `Repair ID ${repair.id}` } });
     } else {
       if (repair.status !== AssetRepairStatus.IN_PROGRESS || asset.status !== AssetStatus.UNDER_REPAIR) throw new AppError(`Complete Repair is stale; Asset status is ${asset.status}`, 409, 'STALE');
       if (!asset.homeLocation?.isActive) throw new AppError('Asset home location is unresolved or inactive', 409, 'STALE');
@@ -120,6 +126,10 @@ export async function confirmRepairTask(taskValue: unknown, input: ConfirmRepair
       const repairChanged = await tx.assetRepair.updateMany({ where: { id: repair.id, status: AssetRepairStatus.IN_PROGRESS }, data: { status: AssetRepairStatus.COMPLETED, completedAt: now, completedByUserId: userId, completionRemarks } });
       const taskChanged = await tx.repairTask.updateMany({ where: { id: task.id, status: RepairTaskStatus.PENDING }, data: { status: RepairTaskStatus.CONFIRMED, confirmedAt: now, confirmedByUserId: userId } });
       if (assetChanged.count !== 1 || repairChanged.count !== 1 || taskChanged.count !== 1) throw new AppError('Repair completion conflicted with another action. Refresh the queue.', 409, 'CONFLICT');
+      const hierarchy = await loadLocationHierarchy(tx);
+      const fromDepartment = resolveLocationDepartment(asset.locationId, hierarchy);
+      const toDepartment = resolveLocationDepartment(asset.homeLocationId, hierarchy);
+      await tx.assetMovement.create({ data: { movementNo: `MOV-${randomUUID()}`, assetId: asset.id, fromDepartmentId: fromDepartment?.id ?? null, toDepartmentId: toDepartment?.id ?? null, fromLocationId: asset.locationId, toLocationId: asset.homeLocationId, movedByUserId: userId, movementType: MovementType.REPAIR_TRANSFER, movementDate: now, reason: 'REPAIR COMPLETION CONFIRMED', remarks: `Repair ID ${repair.id}` } });
     }
     const result = await tx.assetRepair.findUniqueOrThrow({ where: { id: repair.id }, include: repairInclude });
     return presentRepair(result);

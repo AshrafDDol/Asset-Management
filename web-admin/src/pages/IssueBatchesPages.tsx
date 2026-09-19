@@ -3,8 +3,6 @@ import { useLocation } from "react-router-dom";
 import {
   cancelBatchIssueApi,
   cancelIssueBatchApi,
-  compareBatchScansApi,
-  confirmBatchItemIssueApi,
   confirmHandheldSwapApi,
   getHandheldSwapApi,
   getIssueBatchesApi,
@@ -17,6 +15,7 @@ import {
   type ReturnScanResult,
   type ScanResult,
 } from "../api/issueBatches.api";
+import { cancelRepairTaskApi, getRepairsApi, type AssetRepair } from "../api/repairs.api";
 import { chronological, type ListOrder } from "../utils/listOrder";
 import { RefreshCw, ScanLine } from "lucide-react";
 import { useErrorToast, useSuccessToast } from "@/hooks/useErrorToast";
@@ -79,16 +78,12 @@ export function IssueBatchesPages() {
   const location = useLocation();
   const navigationMessage =
     (location.state as { message?: string } | null)?.message || "";
-  const [tab, setTab] = useState<"ISSUE" | "RETURNING">("ISSUE");
+  const [tab, setTab] = useState<"ISSUE" | "RETURNING" | "REPAIR">("ISSUE");
   const [batches, setBatches] = useState<IssueBatch[]>([]);
+  const [repairs, setRepairs] = useState<AssetRepair[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(navigationMessage);
   const [error, setError] = useState("");
-  const [scanBatch, setScanBatch] = useState<IssueBatch | null>(null);
-  const [scanItem, setScanItem] = useState<IssueBatchItem | null>(null);
-  const [scanText, setScanText] = useState("");
-  const [scanRemarks, setScanRemarks] = useState("");
-  const [scanResults, setScanResults] = useState<ScanResult[]>([]);
   const [scanAllJobsOpen, setScanAllJobsOpen] = useState(false);
   const [allJobsScanText, setAllJobsScanText] = useState("");
   const [allJobsRemarks, setAllJobsRemarks] = useState("");
@@ -106,11 +101,13 @@ export function IssueBatchesPages() {
   useSuccessToast(message);
 
   async function refresh() {
-    setBatches(await getIssueBatchesApi());
+    const [nextBatches, nextRepairs] = await Promise.all([getIssueBatchesApi(), getRepairsApi()]);
+    setBatches(nextBatches);
+    setRepairs(nextRepairs);
   }
   useEffect(() => {
-    void getIssueBatchesApi()
-      .then(setBatches)
+    void Promise.all([getIssueBatchesApi(), getRepairsApi()])
+      .then(([nextBatches, nextRepairs]) => { setBatches(nextBatches); setRepairs(nextRepairs); })
       .catch((caught) => setError(errorText(caught)));
   }, []);
 
@@ -186,59 +183,6 @@ export function IssueBatchesPages() {
       setSwapVerificationTask(null);
       await refresh();
       setMessage("Swap confirmed.");
-    } catch (caught) {
-      setError(errorText(caught));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function openScan(batch: IssueBatch, item: IssueBatchItem | null = null) {
-    setScanBatch(batch);
-    setScanItem(item);
-    setScanText("");
-    setScanRemarks("");
-    setScanResults([]);
-  }
-
-  async function submitScan(event: FormEvent) {
-    event.preventDefault();
-    if (!scanBatch) return;
-    setBusy(true);
-    setError("");
-    setMessage("");
-    try {
-      const results = scanItem
-        ? (await confirmBatchItemIssueApi(
-            scanItem.id,
-            scanText.trim(),
-            scanRemarks
-          ),
-          [
-            {
-              epc: scanText.trim().toUpperCase(),
-              classification: "MATCHED_CONFIRMED",
-              assetId: scanItem.assetId,
-              itemId: scanItem.id,
-            },
-          ])
-        : (
-            await compareBatchScansApi(
-              scanBatch.id,
-              scanText.split(/[\s,;]+/).filter(Boolean),
-              scanRemarks
-            )
-          ).results;
-      setScanResults(results);
-      await refresh();
-      const confirmed = results.filter(
-        (item) => item.classification === "MATCHED_CONFIRMED"
-      ).length;
-      setMessage(
-        `${confirmed} Asset${
-          confirmed === 1 ? "" : "s"
-        } confirmed. Unexpected EPCs made no changes.`
-      );
     } catch (caught) {
       setError(errorText(caught));
     } finally {
@@ -342,6 +286,11 @@ export function IssueBatchesPages() {
     items.map((item) => ({ batch, item }))
   );
   const returningCount = returningItems.length;
+  const pendingRepairTasks = repairs.flatMap((repair) =>
+    repair.tasks
+      .filter((task) => task.status === "PENDING")
+      .map((task) => ({ repair, task }))
+  );
 
   const swapOldEpc = normalizeEpc(
     swapVerificationTask?.targetItem.asset.epc?.epcCode
@@ -382,7 +331,7 @@ export function IssueBatchesPages() {
       <ErrorBox message={error} />
       <SuccessBox message={message} />
 
-      <Tabs value={tab} onValueChange={(value) => setTab(value as "ISSUE" | "RETURNING")}>
+      <Tabs value={tab} onValueChange={(value) => setTab(value as "ISSUE" | "RETURNING" | "REPAIR")}>
         <TabsList>
           <TabsTrigger value="ISSUE" className="gap-2">
             Issue &amp; Confirmation
@@ -391,6 +340,10 @@ export function IssueBatchesPages() {
           <TabsTrigger value="RETURNING" className="gap-2">
             Returning
             <Badge variant="secondary" className="tabular-nums">{returningCount}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="REPAIR" className="gap-2">
+            Repair
+            <Badge variant="secondary" className="tabular-nums">{pendingRepairTasks.length}</Badge>
           </TabsTrigger>
         </TabsList>
 
@@ -437,10 +390,10 @@ export function IssueBatchesPages() {
                 <Card key={batch.id} className="overflow-hidden">
                   <CardHeader className="flex flex-wrap items-start justify-between gap-4">
                     <div className="space-y-1">
-                      <CardTitle>{batch.batchNo}</CardTitle>
-                      {batch.jobNo && (
-                        <p className="text-sm text-muted-foreground">Job No: {batch.jobNo}</p>
-                      )}
+                      <CardTitle className="text-xl font-bold">
+                        {batch.jobNo || "No Job No."}
+                      </CardTitle>
+                      <p className="text-sm text-muted-foreground">{batch.batchNo}</p>
                       <div className="flex flex-wrap items-center gap-2 pt-1">
                         <Badge variant="secondary">{awaiting.length} Awaiting Confirmation</Badge>
                         {awaitingSwap.length > 0 && (
@@ -452,10 +405,6 @@ export function IssueBatchesPages() {
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Button disabled={busy || awaiting.length === 0} onClick={() => openScan(batch)}>
-                        <ScanLine />
-                        Scan All
-                      </Button>
                       <Button
                         variant="outline"
                         disabled={busy || awaiting.length === 0}
@@ -523,47 +472,40 @@ export function IssueBatchesPages() {
                                 )}
                               </TableCell>
                               <TableCell>
-                                {item.handheldSwapTasks?.length ? (
+                                <div className="flex gap-1">
+                                  {item.handheldSwapTasks?.length ? (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      disabled={busy}
+                                      onClick={() => void openSwapVerification(item)}
+                                    >
+                                      Verify EPC
+                                    </Button>
+                                  ) : null}
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    disabled={busy}
-                                    onClick={() => void openSwapVerification(item)}
-                                  >
-                                    Verify EPC
-                                  </Button>
-                                ) : item.status === "ISSUED" && !item.handheldSwapTasks?.length ? (
-                                  <div className="flex gap-1">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      disabled={busy}
-                                      onClick={() => openScan(batch, item)}
-                                    >
-                                      Confirm EPC
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      disabled={busy}
-                                      onClick={() => {
-                                        if (
-                                          window.confirm(
-                                            `Cancel ${item.asset.assetCode}? The Asset will become AVAILABLE.`
-                                          )
+                                    disabled={
+                                      busy ||
+                                      item.status !== "ISSUED" ||
+                                      !!item.handheldSwapTasks?.length
+                                    }
+                                    onClick={() => {
+                                      if (
+                                        window.confirm(
+                                          `Cancel ${item.asset.assetCode}? The Asset will become AVAILABLE.`
                                         )
-                                          void run(
-                                            () => cancelBatchIssueApi(item.id),
-                                            "Unconfirmed item cancelled; Asset is AVAILABLE."
-                                          );
-                                      }}
-                                    >
-                                      Cancel
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  "—"
-                                )}
+                                      )
+                                        void run(
+                                          () => cancelBatchIssueApi(item.id),
+                                          "Unconfirmed item cancelled; Asset is AVAILABLE."
+                                        );
+                                    }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -662,6 +604,37 @@ export function IssueBatchesPages() {
             ))}
           </TableCard>
         </TabsContent>
+
+        <TabsContent value="REPAIR" className="space-y-6">
+          <TableCard
+            columns={["Asset", "Action", "Repair Location", "Reason", "Action"]}
+            isEmpty={pendingRepairTasks.length === 0}
+            emptyMessage="No repair actions are awaiting confirmation."
+            itemLabel="repair action"
+          >
+            {pendingRepairTasks.map(({ repair, task }) => (
+              <TableRow key={task.id}>
+                <TableCell>
+                  <div className="font-mono text-xs">{repair.asset.assetCode}</div>
+                  <div className="text-xs text-muted-foreground">{repair.asset.itemName}</div>
+                </TableCell>
+                <TableCell>{task.action.replaceAll("_", " ")}</TableCell>
+                <TableCell>{repair.repairLocation.name}</TableCell>
+                <TableCell className="text-muted-foreground">{repair.reason}</TableCell>
+                <TableCell>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void run(() => cancelRepairTaskApi(task.id), "Repair task cancelled.")}
+                  >
+                    Cancel
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableCard>
+        </TabsContent>
       </Tabs>
 
       {/* Swap EPC verification */}
@@ -746,83 +719,6 @@ export function IssueBatchesPages() {
                   </Button>
                 )}
               </DialogFooter>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Per-batch or per-item scan */}
-      <Dialog
-        open={!!scanBatch}
-        onOpenChange={(open) => {
-          if (!open) {
-            setScanBatch(null);
-            setScanItem(null);
-          }
-        }}
-      >
-        <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
-          {scanBatch && (
-            <form onSubmit={submitScan} className="flex min-h-0 flex-1 flex-col">
-              <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
-              <DialogHeader>
-                <DialogTitle>{scanItem ? "Confirm EPC" : "Scan All"}</DialogTitle>
-                <DialogDescription>
-                  {scanItem
-                    ? `${scanItem.asset.assetCode} · Expected EPC verification`
-                    : `${scanBatch.batchNo} · Compare pasted EPCs with expected Assets`}
-                </DialogDescription>
-              </DialogHeader>
-
-              <Field label={scanItem ? "Paste / Enter EPC" : "Paste EPCs"} htmlFor="scan-input">
-                {scanItem ? (
-                  <Input
-                    id="scan-input"
-                    autoFocus
-                    required
-                    value={scanText}
-                    onChange={(event) => setScanText(event.target.value)}
-                  />
-                ) : (
-                  <Textarea
-                    id="scan-input"
-                    autoFocus
-                    rows={6}
-                    required
-                    value={scanText}
-                    onChange={(event) => setScanText(event.target.value)}
-                    placeholder="One EPC per line, or comma-separated"
-                  />
-                )}
-              </Field>
-
-              <Field label="Remarks" htmlFor="scan-remarks">
-                <Input
-                  id="scan-remarks"
-                  value={scanRemarks}
-                  onChange={(event) => setScanRemarks(event.target.value)}
-                />
-              </Field>
-
-              <Button className="w-full" disabled={busy}>
-                {busy ? "Confirming..." : scanItem ? "Confirm EPC" : "Compare and Confirm Matches"}
-              </Button>
-
-              {scanResults.length > 0 && (
-                <ul className="space-y-1 rounded-md border p-3 text-sm">
-                  {scanResults.map((result, index) => (
-                    <li key={`${result.epc}-${index}`} className="flex items-center gap-2">
-                      <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                        {result.epc || "(blank)"}
-                      </code>
-                      <span className="text-muted-foreground">
-                        {scanResultLabel(result.classification)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              </div>
             </form>
           )}
         </DialogContent>

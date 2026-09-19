@@ -25,9 +25,9 @@ type LocationFilters = { name: string; type: string; code: string; department: s
 
 const EMPTY_FILTERS: LocationFilters = { name: "", type: "", code: "", department: "" };
 
-const LOCATION_TYPES = ["STORE", "WAREHOUSE", "RACK", "LEVEL", "BIN", "FILE", "PRODUCTION_AREA", "MACHINE_LOCATION", "OTHER"];
+const LOCATION_TYPES = ["STORAGE", "OPERATION", "REPAIR"];
 
-const friendly = (value: string) => value.replaceAll("_", " ");
+const friendly = (value: string) => value.charAt(0) + value.slice(1).toLowerCase().replaceAll("_", " ");
 
 function locationTreeRows(locations: Location[], expanded: Set<number>, filters: LocationFilters, order: ListOrder): TreeRow[] {
   const byId = new Map(locations.map((location) => [location.id, location]));

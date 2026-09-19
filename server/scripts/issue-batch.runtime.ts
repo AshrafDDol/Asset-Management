@@ -12,9 +12,9 @@ async function main() {
   const role = await prisma.role.findFirstOrThrow({ where: { isActive: true } });
   const user = await prisma.user.create({ data: { username: `batch-${suffix}`, fullName: "Batch Runtime User", email: `batch-${suffix}@example.test`, passwordHash: "runtime-only", roleId: role.id } }); userId = user.id;
   const category = await prisma.assetCategory.create({ data: { categoryCode: `BC${suffix.slice(-8)}`, name: `Batch Runtime ${suffix}` } }); categoryId = category.id;
-  const home = await prisma.location.create({ data: { locationCode: `BH${suffix.slice(-8)}`, name: "Batch Runtime Home", locationType: "BIN" } }); locationIds.push(home.id);
-  const operationA = await prisma.location.create({ data: { locationCode: `BO${suffix.slice(-8)}`, name: "Batch Runtime Operation A", locationType: "PRODUCTION_AREA" } }); locationIds.push(operationA.id);
-  const operationB = await prisma.location.create({ data: { locationCode: `BM${suffix.slice(-8)}`, name: "Batch Runtime Operation B", locationType: "MACHINE_LOCATION" } }); locationIds.push(operationB.id);
+  const home = await prisma.location.create({ data: { locationCode: `BH${suffix.slice(-8)}`, name: "Batch Runtime Home", locationType: "STORAGE" } }); locationIds.push(home.id);
+  const operationA = await prisma.location.create({ data: { locationCode: `BO${suffix.slice(-8)}`, name: "Batch Runtime Operation A", locationType: "OPERATION" } }); locationIds.push(operationA.id);
+  const operationB = await prisma.location.create({ data: { locationCode: `BM${suffix.slice(-8)}`, name: "Batch Runtime Operation B", locationType: "OPERATION" } }); locationIds.push(operationB.id);
   const assets: Awaited<ReturnType<typeof createAsset>>[] = [];
   for (let n = 1; n <= 6; n += 1) { const asset = await createAsset({ assetCode: `BATCH-${suffix}-${n}`, itemName: `Runtime Asset ${n}`, categoryId, locationId: home.id, autoGenerateEpc: true, measurementHeight: 100 + n, measurementWidth: 200 + n }); assets.push(asset); assetIds.push(asset.id); assert.match(asset.epc!.epcCode, /^(?:[0-9A-F]{2})+$/); }
   assert.equal(new Set(assets.map((a) => a.epc!.epcCode)).size, 6);

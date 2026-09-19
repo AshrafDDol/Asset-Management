@@ -12,8 +12,8 @@ async function main() {
   const role = await prisma.role.findFirstOrThrow({ where: { isActive: true } });
   const user = await prisma.user.create({ data: { username: `return-proof-${suffix}`, fullName: "Return Proof Runtime", email: `return-proof-${suffix}@example.test`, passwordHash: "runtime-only", roleId: role.id } }); userId = user.id;
   const category = await prisma.assetCategory.create({ data: { categoryCode: `RH${suffix.slice(-8)}`, name: `Return Proof ${suffix}` } }); categoryId = category.id;
-  const home = await prisma.location.create({ data: { locationCode: `RHH${suffix.slice(-7)}`, name: "Return Home", locationType: "BIN" } }); locationIds.push(home.id);
-  const operation = await prisma.location.create({ data: { locationCode: `RHO${suffix.slice(-7)}`, name: "Return Operation", locationType: "PRODUCTION_AREA" } }); locationIds.push(operation.id);
+  const home = await prisma.location.create({ data: { locationCode: `RHH${suffix.slice(-7)}`, name: "Return Home", locationType: "STORAGE" } }); locationIds.push(home.id);
+  const operation = await prisma.location.create({ data: { locationCode: `RHO${suffix.slice(-7)}`, name: "Return Operation", locationType: "OPERATION" } }); locationIds.push(operation.id);
   const assets: Awaited<ReturnType<typeof createAsset>>[] = [];
   for (let index = 0; index < 14; index += 1) { const asset = await createAsset({ assetCode: `RH-${suffix}-${index}`, itemName: `Return ${index}`, categoryId, locationId: home.id, autoGenerateEpc: true }); assets.push(asset); assetIds.push(asset.id); }
   const issue = async (indexes: number[], label: string) => {

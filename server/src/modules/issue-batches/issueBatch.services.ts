@@ -17,7 +17,7 @@ import { STORAGE_TYPES, validateHomeLocation } from "../assets/assetHome";
 import { loadLocationHierarchy, resolveLocationDepartment } from "../locations/locationHierarchy";
 import { CreateIssueBatchInput, HandheldIssueConfirmationInput, ReturnScanInput, ScanAllJobsInput, ScanComparisonInput, SwapIssueBatchAssetInput } from "./issueBatch.types";
 
-const OPERATION_LOCATION_TYPES: LocationType[] = [LocationType.PRODUCTION_AREA, LocationType.MACHINE_LOCATION];
+const OPERATION_LOCATION_TYPES: LocationType[] = [LocationType.OPERATION];
 const ACTIVE_ITEM_STATUSES: IssueBatchItemStatus[] = [IssueBatchItemStatus.RESERVED, IssueBatchItemStatus.ISSUED, IssueBatchItemStatus.CONFIRMED];
 const ACTIVE_BATCH_STATUSES: IssueBatchStatus[] = [IssueBatchStatus.PREPARING, IssueBatchStatus.PROCESSING];
 
@@ -64,7 +64,7 @@ async function activeUser(tx: Prisma.TransactionClient, userId: number, name = "
 async function operationalLocation(tx: Prisma.TransactionClient, locationId: number) {
   const location = await tx.location.findUnique({ where: { id: id(locationId, "To Location") } });
   if (!location?.isActive || !OPERATION_LOCATION_TYPES.includes(location.locationType)) {
-    throw new AppError("To Location must be an active Production Area or Machine Location", 400);
+    throw new AppError("To Location must be an active Operation location", 400);
   }
   return location;
 }

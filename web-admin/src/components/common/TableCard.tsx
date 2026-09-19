@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { TablePagination } from "@/components/common/TablePagination";
 
 type TableCardProps = {
-  columns: string[];
+  columns: ReactNode[];
   loading?: boolean;
   /** Rendered when there are no rows to show. */
   emptyMessage: string;
@@ -48,8 +48,8 @@ export function TableCard({
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                {columns.map((column) => (
-                  <TableHead key={column} className="whitespace-nowrap">
+                {columns.map((column, index) => (
+                  <TableHead key={index} className="whitespace-nowrap">
                     {column}
                   </TableHead>
                 ))}
@@ -59,8 +59,8 @@ export function TableCard({
               {loading ? (
                 Array.from({ length: 4 }).map((_, rowIndex) => (
                   <TableRow key={rowIndex}>
-                    {columns.map((column) => (
-                      <TableCell key={column}>
+                    {columns.map((_, columnIndex) => (
+                      <TableCell key={columnIndex}>
                         <Skeleton className="h-4 w-full" />
                       </TableCell>
                     ))}
