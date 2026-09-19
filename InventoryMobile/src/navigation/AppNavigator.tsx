@@ -17,6 +17,7 @@ import RepairQueueScreen from '../screen/RepairQueueScreen/RepairQueueScreen';
 import RepairScanScreen from '../screen/RepairScanScreen/RepairScanScreen';
 import ReturnQueueScreen from '../screen/ReturnQueueScreen/ReturnQueueScreen';
 import SwapQueueScreen from '../screen/SwapQueueScreen/SwapQueueScreen';
+import RFIDSettingsScreen from '../screen/RFIDSettingsScreen/RFIDSettingsScreen';
 
 const Stack = createNativeStackNavigator<ScreenStackParamList>();
 
@@ -25,6 +26,7 @@ const AppNavigator: React.FC = () => {
         <Stack.Navigator initialRouteName="LoginScreen">
             <Stack.Screen name="LoginScreen" component={LoginScreen} />
             <Stack.Screen name="HomeScreen" component={HomeScreen} />
+            <Stack.Screen name="RFIDSettingsScreen" component={RFIDSettingsScreen} options={{ title: 'RFID Settings' }} />
             <Stack.Screen
                 name="RFIDDiagnosticScreen"
                 component={RFIDDiagnosticScreen}

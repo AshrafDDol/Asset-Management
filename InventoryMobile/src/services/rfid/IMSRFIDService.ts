@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 
 import { RFIDTag } from '../../types/RFIDTag';
+import { loadRFIDSettings } from '../settings/RFIDSettingsService';
 
 type TriggerAction = 'DOWN' | 'UP';
 type RFIDLifecycleState =
@@ -43,6 +44,11 @@ type TagsListener = (tags: RFIDTag[]) => void;
 type TriggerListener = (event: RFIDTriggerEvent) => void;
 type ErrorListener = (message: string) => void;
 
+export type RFIDPowerApplicationResult =
+  | { status: 'applied'; readerPower: number }
+  | { status: 'deferred' }
+  | { status: 'failed'; message: string; readerPower?: number };
+
 const nativeModule = NativeModules.IMSRFID as NativeIMSRFIDModule | undefined;
 const NATIVE_OPERATION_TIMEOUT_MS = 8000;
 
@@ -77,7 +83,12 @@ class IMSRFIDService {
         this.notifyError('IMSRFID native module is unavailable on this platform');
         return false;
       }
-      if (this.state === 'READY' || this.state === 'SCANNING') {
+      if (this.state === 'SCANNING') {
+        return true;
+      }
+
+      if (this.state === 'READY') {
+        await this.applySavedPowerWithinQueue();
         return true;
       }
 
@@ -88,6 +99,9 @@ class IMSRFIDService {
           'initialize',
         );
         this.state = initialized ? 'READY' : 'CLOSED';
+        if (initialized) {
+          await this.applySavedPowerWithinQueue();
+        }
         return initialized;
       } catch (error) {
         this.state = 'ERROR';
@@ -193,10 +207,7 @@ class IMSRFIDService {
         return false;
       }
       try {
-        return await this.withNativeTimeout(
-          nativeModule.setPower(power),
-          'setPower',
-        );
+        return await this.setPowerWithinQueue(power);
       } catch (error) {
         this.state = 'ERROR';
         this.notifyError(this.errorMessage(error));
@@ -212,6 +223,10 @@ class IMSRFIDService {
       }
       return this.withNativeTimeout(nativeModule.getPower(), 'getPower');
     });
+  }
+
+  async applyPowerWhenReady(power: number): Promise<RFIDPowerApplicationResult> {
+    return this.enqueueOperation(() => this.applyPowerWithinQueue(power));
   }
 
   onTags(listener: TagsListener): () => void {
@@ -394,6 +409,56 @@ class IMSRFIDService {
       this.notifyError(this.errorMessage(error));
       return false;
     }
+  }
+
+  private async applySavedPowerWithinQueue(): Promise<void> {
+    try {
+      const settings = await loadRFIDSettings();
+      const result = await this.applyPowerWithinQueue(settings.rfidPower);
+      if (result.status === 'failed') {
+        this.notifyError(result.message);
+      }
+    } catch (error) {
+      this.notifyError(`Failed to load RFID power setting: ${this.errorMessage(error)}`);
+    }
+  }
+
+  private async applyPowerWithinQueue(
+    power: number,
+  ): Promise<RFIDPowerApplicationResult> {
+    if (!nativeModule || this.state !== 'READY') {
+      return { status: 'deferred' };
+    }
+
+    try {
+      const applied = await this.setPowerWithinQueue(power);
+      if (!applied) {
+        return { status: 'failed', message: 'RFID reader did not accept the power setting.' };
+      }
+
+      const readerPower = await this.withNativeTimeout(
+        nativeModule.getPower(),
+        'getPower',
+      );
+      if (readerPower !== power) {
+        return {
+          status: 'failed',
+          message: `RFID reader reported ${readerPower} dBm after applying ${power} dBm.`,
+          readerPower,
+        };
+      }
+
+      return { status: 'applied', readerPower };
+    } catch (error) {
+      return {
+        status: 'failed',
+        message: `Failed to apply RFID power: ${this.errorMessage(error)}`,
+      };
+    }
+  }
+
+  private setPowerWithinQueue(power: number): Promise<boolean> {
+    return this.withNativeTimeout(nativeModule!.setPower(power), 'setPower');
   }
 
   private handleError = (error: NativeRFIDError | string): void => {

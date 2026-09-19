@@ -6,6 +6,7 @@ import { confirmationErrorMessage } from '../../api/client';
 import { cancelSwap, confirmSwap, getSwapTask, SwapTask, verifySwapEpc } from '../../api/handheldWork';
 import { useRFIDSession } from '../../hooks/useRFIDSession';
 import { ScreenStackParamList } from '../../navigation/types';
+import { playAcceptedScanFeedback } from '../../services/feedback/ScanFeedbackService';
 
 type Props = NativeStackScreenProps<ScreenStackParamList, 'SwapScanScreen'>;
 const normalize = (value: string) => value.trim().toUpperCase();
@@ -41,7 +42,14 @@ const SwapScanScreen: React.FC<Props> = ({ route, navigation }) => {
   const recordVerification = useCallback(async (step: 'OLD' | 'REPLACEMENT', epc: string) => {
     if (!task || verificationRequestRef.current) return;
     verificationRequestRef.current = step;
-    try { applyTask(await verifySwapEpc(task.id, step, epc)); setError(null); }
+    try {
+      const wasVerified = step === 'OLD' ? verificationRef.current.old : verificationRef.current.replacement;
+      const nextTask = await verifySwapEpc(task.id, step, epc);
+      applyTask(nextTask);
+      const isVerified = step === 'OLD' ? verificationRef.current.old : verificationRef.current.replacement;
+      if (!wasVerified && isVerified) { playAcceptedScanFeedback().catch(() => undefined); }
+      setError(null);
+    }
     catch (reason) { setError(confirmationErrorMessage(reason)); }
     finally { verificationRequestRef.current = null; }
   }, [applyTask, task]);
@@ -99,7 +107,7 @@ const SwapScanScreen: React.FC<Props> = ({ route, navigation }) => {
 
   return <SafeAreaView style={styles.container}>
     <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => refreshVerification().catch(() => undefined)} />}>
-      <Text style={styles.screenTitle}>Swap Verification</Text>
+      <View style={styles.screenHeader}><Text style={styles.screenTitle}>Swap Verification</Text><View style={[styles.rfidLed, rfid.status === 'Ready' && styles.rfidLedReady]} /></View>
       <View style={styles.headingCard}><Text style={styles.jobTitle}>{task.issueBatch.jobNo || task.issueBatch.batchNo}</Text><Text style={styles.step}>{currentStep}</Text><Text style={styles.stepHeading}>{currentHeading}</Text></View>
       <View style={styles.tableCard}><ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.tableContent}>
         <View style={styles.tableContent}>
@@ -119,6 +127,7 @@ const SwapScanScreen: React.FC<Props> = ({ route, navigation }) => {
 const VerificationRow = ({ type, asset, verified }: { type: string; asset: SwapTask['replacementAsset']; verified: boolean }) => <View style={styles.tableRow}><Text style={[styles.typeColumn, styles.cellText, verified && styles.verifiedText]}>{type}</Text><Text style={[styles.codeColumn, styles.cellText, verified && styles.verifiedText]}>{asset.assetCode}</Text><Text numberOfLines={1} style={[styles.nameColumn, styles.cellText, verified && styles.verifiedText]}>{asset.itemName}</Text><Text style={[styles.statusColumn, styles.statusText, verified && styles.verifiedText]}>{verified ? 'Verified' : 'Waiting'}</Text></View>;
 
 const styles = StyleSheet.create({
+  screenHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, rfidLed: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#94A3B8' }, rfidLedReady: { backgroundColor: '#22C55E' },
   container: { flex: 1, backgroundColor: '#F4F7FB' }, content: { padding: 16, paddingBottom: 20, gap: 14 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center' }, errorState: { padding: 20, gap: 12 }, screenTitle: { color: '#0F172A', fontSize: 23, fontWeight: '800' },
   headingCard: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 15, padding: 14, gap: 4, backgroundColor: '#FFFFFF' }, jobTitle: { color: '#0F172A', fontSize: 20, fontWeight: '800' }, step: { color: '#64748B', fontSize: 13, marginTop: 3 }, stepHeading: { color: '#0F172A', fontSize: 17, fontWeight: '700' },
   tableCard: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 15, padding: 12, backgroundColor: '#FFFFFF' }, tableContent: { width: 445 }, tableRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E2E8F0' }, tableHeader: { minHeight: 44, backgroundColor: '#F8FAFC' }, headerText: { color: '#475569', fontSize: 12, fontWeight: '700', paddingHorizontal: 8 }, cellText: { color: '#334155', fontSize: 12, paddingHorizontal: 8 }, statusText: { color: '#475569', fontSize: 12, fontWeight: '600', paddingHorizontal: 8 }, typeColumn: { width: 95 }, codeColumn: { width: 100 }, nameColumn: { width: 150 }, statusColumn: { width: 100 }, verifiedText: { color: '#27823B', fontWeight: '700' },

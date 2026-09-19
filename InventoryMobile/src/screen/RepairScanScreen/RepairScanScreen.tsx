@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { apiErrorMessage } from '../../api/client';
 import { cancelRepairTask, confirmRepairTask, getRepairTask, RepairTask } from '../../api/repairs';
 import { useRFIDSession } from '../../hooks/useRFIDSession';
 import { ScreenStackParamList } from '../../navigation/types';
+import { playAcceptedScanFeedback } from '../../services/feedback/ScanFeedbackService';
 
 type Props = NativeStackScreenProps<ScreenStackParamList, 'RepairScanScreen'>;
 const normalize = (value: string) => value.trim().toUpperCase();
@@ -27,6 +28,7 @@ const RepairScanScreen: React.FC<Props> = ({ route, navigation }) => {
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
   const [, tick] = useState(0);
+  const feedbackPlayedRef = useRef(false);
 
   useEffect(() => { getRepairTask(route.params.taskId).then(setTask).catch(reason => setError(apiErrorMessage(reason))).finally(() => setLoading(false)); }, [route.params.taskId]);
   useEffect(() => { const timer = setInterval(() => tick(value => value + 1), 60000); return () => clearInterval(timer); }, []);
@@ -36,7 +38,7 @@ const RepairScanScreen: React.FC<Props> = ({ route, navigation }) => {
     for (const tag of tags) {
       const scanned = normalize(tag.epc);
       if (!validEpc(scanned) || scanned !== expected) { setWrongEpc(scanned); continue; }
-      setVerified(true); setWrongEpc(''); setError(''); break;
+      setVerified(true); setWrongEpc(''); setError(''); if (!feedbackPlayedRef.current) { feedbackPlayedRef.current = true; playAcceptedScanFeedback().catch(() => undefined); } break;
     }
   }, [task, verified]);
   const noReset = useCallback(() => undefined, []);
@@ -48,7 +50,7 @@ const RepairScanScreen: React.FC<Props> = ({ route, navigation }) => {
       await rfid.stop();
       await confirmRepairTask(task.id, normalize(task.repair.asset.epc!.epcCode), task.action === 'COMPLETE_REPAIR' ? completionRemarks : undefined);
       await rfid.release(); setDone(true);
-    } catch (reason) { setError(apiErrorMessage(reason)); setVerified(false); }
+    } catch (reason) { setError(apiErrorMessage(reason)); feedbackPlayedRef.current = false; setVerified(false); }
     finally { setSubmitting(false); }
   };
   const cancel = () => Alert.alert('Cancel prepared Repair action?', 'Cancelling this pending task does not change Asset status or location.', [{ text: 'Keep', style: 'cancel' }, { text: 'Cancel Task', style: 'destructive', onPress: async () => { setSubmitting(true); try { await cancelRepairTask(route.params.taskId); await rfid.release(); navigation.goBack(); } catch (reason) { setError(apiErrorMessage(reason)); setSubmitting(false); } } }]);
@@ -62,7 +64,7 @@ const RepairScanScreen: React.FC<Props> = ({ route, navigation }) => {
 
   return <SafeAreaView style={styles.container}>
     <ScrollView contentContainerStyle={styles.content}>
-      <Text style={styles.title}>{finalLabel}</Text>
+      <View style={styles.screenHeader}><Text style={styles.title}>{finalLabel}</Text><View style={[styles.rfidLed, rfid.status === 'Ready' && styles.rfidLedReady]} /></View>
       <View style={styles.assetCard}>
         <Text style={styles.code}>{task.repair.asset.assetCode}</Text>
         <Text style={styles.assetName}>{task.repair.asset.itemName}</Text>
@@ -83,6 +85,7 @@ const RepairScanScreen: React.FC<Props> = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  screenHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, rfidLed: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#94A3B8' }, rfidLedReady: { backgroundColor: '#22C55E' },
   container: { flex: 1, backgroundColor: '#F4F7FB' }, content: { padding: 16, paddingBottom: 20, gap: 14 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }, title: { color: '#0F172A', fontSize: 23, fontWeight: '800' },
   assetCard: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 15, padding: 15, gap: 5, backgroundColor: '#FFFFFF' }, code: { color: '#0F172A', fontSize: 21, fontWeight: '800' }, assetName: { color: '#475569', fontSize: 15 }, divider: { height: StyleSheet.hairlineWidth, backgroundColor: '#E2E8F0', marginVertical: 7 }, fieldLabel: { color: '#64748B', fontSize: 12, fontWeight: '600', marginTop: 5 }, fieldValue: { color: '#0F172A', fontSize: 15 },
   verificationCard: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 15, padding: 15, gap: 7, backgroundColor: '#FFFFFF' }, verificationLabel: { color: '#64748B', fontSize: 13, fontWeight: '700' }, waiting: { color: '#334155', fontSize: 17, fontWeight: '600' }, verified: { color: '#27823B', fontSize: 17, fontWeight: '700' }, error: { color: '#A51D1D' }, inputLabel: { color: '#334155', fontSize: 13, fontWeight: '700', marginBottom: 7 }, input: { minHeight: 76, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, padding: 11, backgroundColor: '#FFFFFF', textAlignVertical: 'top' },

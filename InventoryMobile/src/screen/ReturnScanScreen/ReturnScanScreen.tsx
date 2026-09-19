@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
@@ -6,6 +6,7 @@ import { confirmationErrorMessage } from '../../api/client';
 import { confirmReturns, getReturnJobs, ReturnItem } from '../../api/handheldWork';
 import { useRFIDSession } from '../../hooks/useRFIDSession';
 import { ScreenStackParamList } from '../../navigation/types';
+import { playAcceptedScanFeedback } from '../../services/feedback/ScanFeedbackService';
 
 type Props = NativeStackScreenProps<ScreenStackParamList, 'ReturnScanScreen'>;
 type MagnifiedValue = { label: string; value: string };
@@ -26,6 +27,7 @@ const ReturnScanScreen: React.FC<Props> = ({ route, navigation }) => {
   const [confirmed, setConfirmed] = useState(false);
   const [workChanged, setWorkChanged] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const feedbackAcceptedRef = useRef(new Set<string>());
   const isScanAll = route.params.issueId === undefined;
 
   const expectedByEpc = useMemo(() => new Map(items.filter(item => item.asset.epc?.epcCode).map(item => [normalize(item.asset.epc!.epcCode), item])), [items]);
@@ -55,6 +57,8 @@ const ReturnScanScreen: React.FC<Props> = ({ route, navigation }) => {
   }, [route.params.issueId]);
 
   const onTags = useCallback((tags: Array<{ epc: string }>) => {
+    const accepted = tags.some(tag => { const epc = normalize(tag.epc); if (!expectedByEpc.has(epc) || feedbackAcceptedRef.current.has(epc)) return false; feedbackAcceptedRef.current.add(epc); return true; });
+    if (accepted) playAcceptedScanFeedback().catch(() => undefined);
     setMatched(previous => {
       const next = new Set(previous);
       tags.forEach(tag => { const epc = normalize(tag.epc); if (expectedByEpc.has(epc)) next.add(epc); });
@@ -71,7 +75,7 @@ const ReturnScanScreen: React.FC<Props> = ({ route, navigation }) => {
       return next.size === previous.size ? previous : next;
     });
   }, [expectedByEpc]);
-  const reset = useCallback(() => { setMatched(new Set()); setSelectedOrder([]); setUnexpected(new Set()); setShowUnexpected(false); setError(null); }, []);
+  const reset = useCallback(() => { feedbackAcceptedRef.current.clear(); setMatched(new Set()); setSelectedOrder([]); setUnexpected(new Set()); setShowUnexpected(false); setError(null); }, []);
   const rfid = useRFIDSession(onTags, reset, !loading && items.length > 0);
 
   const confirm = async () => {
@@ -101,7 +105,8 @@ const ReturnScanScreen: React.FC<Props> = ({ route, navigation }) => {
 
   return <SafeAreaView style={styles.container}>
     <ScrollView contentContainerStyle={styles.content} nestedScrollEnabled>
-      {isScanAll ? <View><Text style={styles.title}>Return</Text><Text style={styles.subtitle}>Scan All</Text></View> : <><Text style={styles.title}>Return Verification</Text><View style={styles.detailCard}><Text style={styles.jobTitle}>{jobTitle}</Text><Text style={styles.detailText}><Text style={styles.detailLabel}>Recipient: </Text>{recipient}</Text></View></>}
+      <View style={styles.screenHeader}>{isScanAll ? <View><Text style={styles.title}>Return</Text><Text style={styles.subtitle}>Scan All</Text></View> : <Text style={styles.title}>Return Verification</Text>}<View style={[styles.rfidLed, rfid.status === 'Ready' && styles.rfidLedReady]} /></View>
+      {!isScanAll && <View style={styles.detailCard}><Text style={styles.jobTitle}>{jobTitle}</Text><Text style={styles.detailText}><Text style={styles.detailLabel}>Recipient: </Text>{recipient}</Text></View>}
       {(error || rfid.error) && <Text style={styles.error}>{error || rfid.error}</Text>}
       {workChanged && <Pressable onPress={() => navigation.goBack()} style={styles.refresh}><Text>Back to refreshed work queue</Text></Pressable>}
       {confirmed && <View style={styles.successCard}><Text style={styles.success}>✓ Return Confirmed</Text><Text>{matched.size} asset(s) returned</Text></View>}
@@ -127,6 +132,7 @@ const ReturnScanScreen: React.FC<Props> = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  screenHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, rfidLed: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#94A3B8' }, rfidLedReady: { backgroundColor: '#22C55E' },
   container: { flex: 1, backgroundColor: '#F4F7FB' }, content: { padding: 16, paddingBottom: 20, gap: 14 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }, title: { color: '#0F172A', fontSize: 23, fontWeight: '800' }, subtitle: { color: '#64748B', fontSize: 13, marginTop: 2 },
   detailCard: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 15, padding: 14, gap: 5, backgroundColor: '#FFFFFF' }, jobTitle: { color: '#0F172A', fontSize: 21, fontWeight: '800' }, detailText: { color: '#334155', fontSize: 14 }, detailLabel: { color: '#0F172A', fontWeight: '700' },
   assetsCard: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 15, padding: 14, backgroundColor: '#FFFFFF' }, assetsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }, sectionTitle: { color: '#0F172A', fontSize: 17, fontWeight: '800' }, filterControl: { flexDirection: 'row', alignItems: 'center', gap: 6 }, filterLabel: { color: '#475569', fontSize: 13, fontWeight: '600' },

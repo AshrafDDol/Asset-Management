@@ -6,6 +6,7 @@ import { confirmationErrorMessage } from '../../api/client';
 import { confirmHandheldIssue, getHandheldIssue, getPendingIssues, HandheldIssue } from '../../api/issueBatches';
 import { useRFIDSession } from '../../hooks/useRFIDSession';
 import { ScreenStackParamList } from '../../navigation/types';
+import { playAcceptedScanFeedback } from '../../services/feedback/ScanFeedbackService';
 
 type Props = NativeStackScreenProps<ScreenStackParamList, 'ProcessingScanAllScreen'>;
 type MagnifiedValue = { label: string; value: string };
@@ -23,16 +24,19 @@ const ProcessingScanAllScreen: React.FC<Props> = ({ navigation }) => {
   const [magnifiedValue, setMagnifiedValue] = useState<MagnifiedValue | null>(null);
   const [showScanComplete, setShowScanComplete] = useState(false);
   const completionNotified = useRef(false);
+  const feedbackAcceptedRef = useRef(new Set<string>());
 
   useEffect(() => { getPendingIssues().then(rows => Promise.all(rows.map(row => getHandheldIssue(row.id)))).then(setIssues).catch(reason => setError(confirmationErrorMessage(reason))).finally(() => setLoading(false)); }, []);
   const items = useMemo(() => issues.flatMap(issue => issue.expectedItems.map(item => ({ issue, item }))), [issues]);
   const expected = useMemo(() => new Map(items.filter(row => row.item.epc).map(row => [normalize(row.item.epc!), row])), [items]);
   const missing = items.filter(row => !row.item.epc);
   const onTags = useCallback((tags: Array<{ epc: string }>) => {
+    const accepted = tags.some(tag => { const epc = normalize(tag.epc); if (!expected.has(epc) || feedbackAcceptedRef.current.has(epc)) return false; feedbackAcceptedRef.current.add(epc); return true; });
+    if (accepted) playAcceptedScanFeedback().catch(() => undefined);
     setMatched(previous => { const next = new Set(previous); tags.forEach(tag => { const epc = normalize(tag.epc); if (expected.has(epc)) next.add(epc); }); return next.size === previous.size ? previous : next; });
     setUnexpected(previous => { const next = new Set(previous); tags.forEach(tag => { const epc = normalize(tag.epc); if (!expected.has(epc)) next.add(epc); }); return next.size === previous.size ? previous : next; });
   }, [expected]);
-  const reset = useCallback(() => { setMatched(new Set()); setUnexpected(new Set()); setShowUnexpected(false); completionNotified.current = false; setShowScanComplete(false); setError(null); }, []);
+  const reset = useCallback(() => { feedbackAcceptedRef.current.clear(); setMatched(new Set()); setUnexpected(new Set()); setShowUnexpected(false); completionNotified.current = false; setShowScanComplete(false); setError(null); }, []);
   const rfid = useRFIDSession(onTags, reset, !loading && items.length > 0 && missing.length === 0);
   const complete = items.length > 0 && missing.length === 0 && matched.size === items.length;
 
@@ -59,7 +63,7 @@ const ProcessingScanAllScreen: React.FC<Props> = ({ navigation }) => {
 
   return <SafeAreaView style={styles.container}>
     <ScrollView contentContainerStyle={styles.content} nestedScrollEnabled>
-      <View><Text style={styles.title}>Asset Issue</Text><Text style={styles.subtitle}>Scan All</Text></View>
+      <View style={styles.screenHeader}><View><Text style={styles.title}>Asset Issue</Text><Text style={styles.subtitle}>Scan All</Text></View><View style={[styles.rfidLed, rfid.status === 'Ready' && styles.rfidLedReady]} /></View>
       {missing.length > 0 && <Text style={styles.error}>RFID confirmation blocked: {missing.map(row => row.item.assetCode).join(', ')} need EPC registration.</Text>}
       {(error || rfid.error) && <Text style={styles.error}>{error || rfid.error}</Text>}
       {confirmed && <Text style={styles.ok}>✓ Confirmed</Text>}
@@ -85,6 +89,7 @@ const ProcessingScanAllScreen: React.FC<Props> = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  screenHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, rfidLed: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#94A3B8' }, rfidLedReady: { backgroundColor: '#22C55E' },
   container: { flex: 1, backgroundColor: '#F4F7FB' }, content: { padding: 16, paddingBottom: 20, gap: 14 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }, title: { color: '#0F172A', fontSize: 23, fontWeight: '800' }, subtitle: { color: '#64748B', fontSize: 13, marginTop: 2 },
   assetsCard: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 15, padding: 14, backgroundColor: '#FFFFFF' }, assetsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }, sectionTitle: { color: '#0F172A', fontSize: 17, fontWeight: '800' }, filterControl: { flexDirection: 'row', alignItems: 'center', gap: 6 }, filterLabel: { color: '#475569', fontSize: 13, fontWeight: '600' },
   horizontalTable: { minWidth: 700 }, verticalTable: { height: 320, width: 700 }, tableContent: { width: 700 }, tableRow: { flexDirection: 'row', minHeight: 52, alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E2E8F0' }, tableHeader: { minHeight: 44, backgroundColor: '#F8FAFC' }, headerText: { color: '#475569', fontSize: 12, fontWeight: '700', paddingHorizontal: 9 }, cellText: { color: '#334155', fontSize: 12, paddingHorizontal: 9 }, jobColumn: { width: 90 }, codeColumn: { width: 105 }, nameColumn: { width: 150 }, statusColumn: { width: 115 }, epcColumn: { width: 240 }, statusText: { color: '#475569', fontSize: 12, fontWeight: '600', paddingHorizontal: 9 }, epcText: { color: '#475569', fontSize: 12, paddingHorizontal: 9 }, matchedText: { color: '#27823B', fontWeight: '600' }, unexpectedText: { color: '#9A6700', fontWeight: '600' },

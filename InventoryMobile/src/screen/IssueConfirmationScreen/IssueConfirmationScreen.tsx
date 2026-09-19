@@ -6,6 +6,7 @@ import { apiErrorMessage, confirmationErrorMessage } from '../../api/client';
 import { confirmHandheldIssue, ExpectedIssueAsset, getHandheldIssue, HandheldIssue } from '../../api/issueBatches';
 import { ScreenStackParamList } from '../../navigation/types';
 import IMSRFIDService, { RFIDTriggerEvent } from '../../services/rfid/IMSRFIDService';
+import { playAcceptedScanFeedback } from '../../services/feedback/ScanFeedbackService';
 
 type Props = NativeStackScreenProps<ScreenStackParamList, 'IssueConfirmationScreen'>;
 type ResultState = 'SCANNING' | 'VALIDATING' | 'CONFIRMED' | 'ERROR';
@@ -16,7 +17,7 @@ const IssueConfirmationScreen: React.FC<Props> = ({ route, navigation }) => {
   const isFocused = useIsFocused();
   const [issue, setIssue] = useState<HandheldIssue | null>(null);
   const [loading, setLoading] = useState(true);
-  const [, setRfidStatus] = useState('Released');
+  const [rfidStatus, setRfidStatus] = useState('Released');
   const [, setTrigger] = useState<'DOWN' | 'UP'>('UP');
   const [, setScanning] = useState(false);
   const [matchedEpcs, setMatchedEpcs] = useState<Set<string>>(new Set());
@@ -30,6 +31,7 @@ const IssueConfirmationScreen: React.FC<Props> = ({ route, navigation }) => {
   const mounted = useRef(false);
   const appState = useRef(AppState.currentState);
   const completionNotified = useRef(false);
+  const feedbackAcceptedRef = useRef(new Set<string>());
 
   const expectedByEpc = useMemo(() => {
     const map = new Map<string, ExpectedIssueAsset>();
@@ -53,15 +55,17 @@ const IssueConfirmationScreen: React.FC<Props> = ({ route, navigation }) => {
 
   useEffect(() => {
     const removeTags = IMSRFIDService.onTags(batch => {
+      const accepted = batch.some(tag => { const epc = normalizeEpc(tag.epc); if (!expectedByEpc.has(epc) || feedbackAcceptedRef.current.has(epc)) return false; feedbackAcceptedRef.current.add(epc); return true; });
+      if (accepted) playAcceptedScanFeedback().catch(() => undefined);
       setMatchedEpcs(previous => { const next = new Set(previous); batch.forEach(tag => { const epc = normalizeEpc(tag.epc); if (expectedByEpc.has(epc)) next.add(epc); }); return next.size === previous.size ? previous : next; });
       setUnexpectedEpcs(previous => { const next = new Set(previous); batch.forEach(tag => { const epc = normalizeEpc(tag.epc); if (epc && !expectedByEpc.has(epc)) next.add(epc); }); return next.size === previous.size ? previous : next; });
     });
     const removeTrigger = IMSRFIDService.onTrigger((event: RFIDTriggerEvent) => {
       setTrigger(event.action);
-      if (event.startsSession) { setMatchedEpcs(new Set()); setUnexpectedEpcs(new Set()); setShowUnexpected(false); completionNotified.current = false; setShowScanComplete(false); setResult('SCANNING'); setError(null); }
+      if (event.startsSession) { feedbackAcceptedRef.current.clear(); setMatchedEpcs(new Set()); setUnexpectedEpcs(new Set()); setShowUnexpected(false); completionNotified.current = false; setShowScanComplete(false); setResult('SCANNING'); setError(null); }
       IMSRFIDService.isScanning().then(setScanning).catch(() => setScanning(false));
     });
-    const removeError = IMSRFIDService.onError(setError);
+    const removeError = IMSRFIDService.onError(message => { setError(message); setRfidStatus('Error'); });
     const subscription = AppState.addEventListener('change', (next: AppStateStatus) => {
       const previous = appState.current; appState.current = next;
       if (previous === 'active' && next !== 'active') { setScanning(false); setTrigger('UP'); setRfidStatus('Released'); IMSRFIDService.release().catch(() => undefined); }
@@ -104,7 +108,7 @@ const IssueConfirmationScreen: React.FC<Props> = ({ route, navigation }) => {
 
   return <SafeAreaView style={styles.container}>
     <ScrollView contentContainerStyle={styles.content} nestedScrollEnabled>
-      <Text style={styles.screenTitle}>Asset Issue</Text>
+      <View style={styles.screenHeader}><Text style={styles.screenTitle}>Asset Issue</Text><View style={[styles.rfidLed, rfidStatus === 'Ready' && styles.rfidLedReady]} /></View>
       <View style={styles.detailCard}><Text style={styles.jobTitle}>{issue.jobNo || issue.batchNo}</Text><Text style={styles.request}>Request: {issue.batchNo}</Text><View style={styles.detailDivider} /><Text style={styles.detailText}><Text style={styles.detailLabel}>To Location: </Text>{issue.toLocation?.name || 'Per asset'}</Text><Text style={styles.detailText}><Text style={styles.detailLabel}>Recipient: </Text>{issue.recipient?.fullName || 'Per asset'}</Text></View>
       {missingEpcAssets.length > 0 && <View style={styles.blocked}><Text style={styles.error}>RFID confirmation blocked. Register EPCs for:</Text>{missingEpcAssets.map(item => <Text key={item.assetId}>{item.assetCode} — {item.itemName}</Text>)}</View>}
       <View style={styles.assetsCard}>
@@ -131,6 +135,7 @@ const IssueConfirmationScreen: React.FC<Props> = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  screenHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, rfidLed: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#94A3B8' }, rfidLedReady: { backgroundColor: '#22C55E' },
   container: { flex: 1, backgroundColor: '#F4F7FB' }, content: { padding: 16, paddingBottom: 20, gap: 14 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }, screenTitle: { color: '#0F172A', fontSize: 23, fontWeight: '800' },
   detailCard: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 15, padding: 14, gap: 4, backgroundColor: '#FFFFFF' }, jobTitle: { color: '#0F172A', fontSize: 21, fontWeight: '800' }, request: { color: '#64748B', fontSize: 13 }, detailDivider: { height: StyleSheet.hairlineWidth, backgroundColor: '#E2E8F0', marginVertical: 5 }, detailText: { color: '#334155', fontSize: 14 }, detailLabel: { color: '#0F172A', fontWeight: '700' },
   sectionTitle: { color: '#0F172A', fontSize: 17, fontWeight: '800' }, assetsCard: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 15, padding: 14, backgroundColor: '#FFFFFF' }, assetsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }, filterControl: { flexDirection: 'row', alignItems: 'center', gap: 6 }, filterLabel: { color: '#475569', fontSize: 13, fontWeight: '600' },

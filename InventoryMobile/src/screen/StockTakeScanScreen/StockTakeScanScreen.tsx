@@ -5,6 +5,7 @@ import { apiErrorMessage } from '../../api/client';
 import { completeStockTake, getStockTake, recordStockTakeScans, StockTake } from '../../api/stockTakes';
 import { useRFIDSession } from '../../hooks/useRFIDSession';
 import { ScreenStackParamList } from '../../navigation/types';
+import { playAcceptedScanFeedback } from '../../services/feedback/ScanFeedbackService';
 
 type Props = NativeStackScreenProps<ScreenStackParamList, 'StockTakeScanScreen'>;
 type MagnifiedValue = { label: string; value: string };
@@ -31,7 +32,7 @@ const StockTakeScanScreen: React.FC<Props> = ({ route, navigation }) => {
     const unique = tags.map(tag => normalize(tag.epc)).filter(epc => epc && !seen.current.has(epc));
     if (!unique.length) return;
     unique.forEach(epc => seen.current.add(epc));
-    request.current = request.current.then(() => recordStockTakeScans(route.params.sessionId, unique)).then(setSession).catch(reason => { unique.forEach(epc => seen.current.delete(epc)); setError(apiErrorMessage(reason)); });
+    request.current = request.current.then(() => recordStockTakeScans(route.params.sessionId, unique)).then(next => { const acceptedExpected = unique.some(epc => next.items.some(item => item.result === 'FOUND' && normalize(item.expectedEpc || '') === epc)); setSession(next); if (acceptedExpected) playAcceptedScanFeedback().catch(() => undefined); }).catch(reason => { unique.forEach(epc => seen.current.delete(epc)); setError(apiErrorMessage(reason)); });
   }, [route.params.sessionId]);
   const noReset = useCallback(() => undefined, []);
   const rfid = useRFIDSession(onTags, noReset, Boolean(session) && (session?.status === 'PENDING' || session?.status === 'IN_PROGRESS'));
@@ -44,7 +45,7 @@ const StockTakeScanScreen: React.FC<Props> = ({ route, navigation }) => {
 
   return <SafeAreaView style={styles.container}>
     <ScrollView contentContainerStyle={styles.content} nestedScrollEnabled>
-      <Text style={styles.screenTitle}>Stock Take Scan</Text>
+      <View style={styles.screenHeader}><Text style={styles.screenTitle}>Stock Take Scan</Text><View style={[styles.rfidLed, rfid.status === 'Ready' && styles.rfidLedReady]} /></View>
       <View style={styles.detailCard}><Text style={styles.stockTakeNo}>{session.stockTakeNo}</Text><View style={styles.divider} /><Text style={styles.detailText}><Text style={styles.detailLabel}>Location: </Text>{session.location.name} ({session.location.locationCode})</Text><Text style={styles.detailText}><Text style={styles.detailLabel}>PIC: </Text>{session.pic}</Text></View>
       {(error || rfid.error) ? <Text style={styles.error}>{error || rfid.error}</Text> : null}
       <View style={styles.assetsCard}>
@@ -68,6 +69,7 @@ const StockTakeScanScreen: React.FC<Props> = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  screenHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, rfidLed: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#94A3B8' }, rfidLedReady: { backgroundColor: '#22C55E' },
   container: { flex: 1, backgroundColor: '#F4F7FB' }, content: { padding: 16, paddingBottom: 20, gap: 14 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }, screenTitle: { color: '#0F172A', fontSize: 23, fontWeight: '800' },
   detailCard: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 15, padding: 14, gap: 5, backgroundColor: '#FFFFFF' }, stockTakeNo: { color: '#0F172A', fontSize: 20, fontWeight: '800' }, divider: { height: StyleSheet.hairlineWidth, backgroundColor: '#E2E8F0', marginVertical: 6 }, detailText: { color: '#475569', fontSize: 14 }, detailLabel: { color: '#334155', fontWeight: '700' },
   assetsCard: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 15, padding: 14, backgroundColor: '#FFFFFF' }, assetsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }, sectionTitle: { color: '#0F172A', fontSize: 17, fontWeight: '800' }, filterControl: { flexDirection: 'row', alignItems: 'center', gap: 6 }, filterLabel: { color: '#475569', fontSize: 13, fontWeight: '600' },
