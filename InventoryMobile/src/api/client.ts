@@ -1,8 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios, { AxiosError } from 'axios';
 
-// The physical handheld uses this loopback URL only with `adb reverse tcp:4000 tcp:4000`.
-export const API_BASE_URL = 'http://127.0.0.1:4000/api';
+import {
+  DEFAULT_BACKEND_URL,
+  loadBackendUrl,
+  normalizeBackendUrl,
+} from '../services/settings/BackendSettingsService';
+
+export const API_BASE_URL = DEFAULT_BACKEND_URL;
 export const AUTH_TOKEN_KEY = 'ims.authToken';
 
 export const api = axios.create({
@@ -11,12 +16,27 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use(async config => {
+  config.baseURL = await loadBackendUrl();
   const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
+
+export const testBackendConnection = async (
+  backendUrl: string,
+): Promise<boolean> => {
+  try {
+    const response = await axios.get('/health', {
+      baseURL: normalizeBackendUrl(backendUrl),
+      timeout: 8000,
+    });
+    return response.status >= 200 && response.status < 300;
+  } catch {
+    return false;
+  }
+};
 
 export const apiErrorMessage = (reason: unknown): string => {
   if (reason instanceof AxiosError) {

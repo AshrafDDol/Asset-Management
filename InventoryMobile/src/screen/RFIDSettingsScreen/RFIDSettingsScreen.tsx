@@ -7,10 +7,19 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
+import { testBackendConnection } from '../../api/client';
 import IMSRFIDService from '../../services/rfid/IMSRFIDService';
+import {
+  DEFAULT_BACKEND_URL,
+  isValidBackendUrl,
+  loadBackendUrl,
+  normalizeBackendUrl,
+  saveBackendUrl,
+} from '../../services/settings/BackendSettingsService';
 import {
   DEFAULT_RFID_POWER,
   loadRFIDSettings,
@@ -35,14 +44,19 @@ const RFIDSettingsScreen: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [isError, setIsError] = useState(false);
+  const [backendUrl, setBackendUrl] = useState(DEFAULT_BACKEND_URL);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionMessage, setConnectionMessage] = useState('');
+  const [connectionError, setConnectionError] = useState(false);
 
   useEffect(() => {
-    loadRFIDSettings()
-      .then(settings => {
+    Promise.all([loadRFIDSettings(), loadBackendUrl()])
+      .then(([settings, savedBackendUrl]) => {
         setSavedPower(settings.rfidPower);
         setSelectedPower(settings.rfidPower);
         setSoundEnabled(settings.soundEnabled);
         setVibrationEnabled(settings.vibrationEnabled);
+        setBackendUrl(savedBackendUrl);
       })
       .catch(reason => {
         setIsError(true);
@@ -56,11 +70,20 @@ const RFIDSettingsScreen: React.FC = () => {
       return;
     }
 
+    if (!isValidBackendUrl(backendUrl)) {
+      setIsError(true);
+      setMessage('Backend URL must start with http:// or https://.');
+      return;
+    }
+
     setSaving(true);
     setMessage('');
     setIsError(false);
 
     try {
+      const persistedBackendUrl = await saveBackendUrl(backendUrl);
+      setBackendUrl(persistedBackendUrl);
+
       const persisted = await saveRFIDSettings({
         rfidPower: selectedPower,
         soundEnabled,
@@ -91,10 +114,34 @@ const RFIDSettingsScreen: React.FC = () => {
       }
     } catch (reason) {
       setIsError(true);
-      setMessage(`Could not save RFID settings: ${String(reason)}`);
+      setMessage(`Could not save settings: ${String(reason)}`);
     } finally {
       setSaving(false);
     }
+  };
+
+  const testConnection = async () => {
+    if (testingConnection) {
+      return;
+    }
+
+    if (!isValidBackendUrl(backendUrl)) {
+      setConnectionError(true);
+      setConnectionMessage('Cannot connect to server');
+      return;
+    }
+
+    setTestingConnection(true);
+    setConnectionMessage('');
+    setConnectionError(false);
+    const reachable = await testBackendConnection(
+      normalizeBackendUrl(backendUrl),
+    );
+    setConnectionError(!reachable);
+    setConnectionMessage(
+      reachable ? '\u2713 Server reachable' : 'Cannot connect to server',
+    );
+    setTestingConnection(false);
   };
 
   if (loading) {
@@ -110,6 +157,40 @@ const RFIDSettingsScreen: React.FC = () => {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>RFID Settings</Text>
+        <View style={styles.card}>
+          <Text style={styles.label}>Server Connection</Text>
+          <Text style={styles.fieldLabel}>Backend URL</Text>
+          <TextInput
+            accessibilityLabel="Backend URL"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            onChangeText={value => {
+              setBackendUrl(value);
+              setConnectionMessage('');
+            }}
+            placeholder={DEFAULT_BACKEND_URL}
+            style={styles.urlInput}
+            value={backendUrl}
+          />
+          <Pressable
+            disabled={testingConnection}
+            onPress={testConnection}
+            style={[
+              styles.testButton,
+              testingConnection && styles.disabled,
+            ]}>
+            <Text style={styles.testButtonText}>
+              {testingConnection ? 'Testing...' : 'Test Connection'}
+            </Text>
+          </Pressable>
+          {connectionMessage ? (
+            <Text style={connectionError ? styles.error : styles.success}>
+              {connectionMessage}
+            </Text>
+          ) : null}
+        </View>
+
         <View style={styles.card}>
           <Text style={styles.label}>RFID Power</Text>
           <Text style={styles.current}>Current: {savedPower} dBm</Text>
@@ -195,6 +276,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   label: { color: '#0F172A', fontSize: 18, fontWeight: '700' },
+  fieldLabel: { color: '#334155', fontSize: 14, fontWeight: '600' },
+  urlInput: {
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: '#94A3B8',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#0F172A',
+    backgroundColor: '#FFFFFF',
+  },
+  testButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: '#E8F0FE',
+  },
+  testButtonText: { color: '#1F6FEB', fontWeight: '700' },
   current: { color: '#334155', fontSize: 16 },
   selected: { color: '#1F6FEB', fontSize: 16, fontWeight: '700' },
   reader: { color: '#475569', fontSize: 14 },
