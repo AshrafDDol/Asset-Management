@@ -579,13 +579,13 @@ export function IssueBatchesPages() {
 
         <TabsContent value="RETURNING" className="space-y-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-1">
+            {/* <div className="space-y-1">
               <h3 className="text-lg font-semibold">Assets Currently In Use</h3>
               <p className="text-sm text-muted-foreground">
                 Scan returned EPCs from any Issue Batch. Verified Assets return directly to their
                 registered home location.
               </p>
-            </div>
+            </div> */}
             <Button
               onClick={() => {
                 setReturnScanOpen(true);

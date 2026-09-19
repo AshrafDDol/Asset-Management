@@ -13,7 +13,7 @@ interface HomeScreenProps {
 export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     return(
         <View style={styles.container}>
-            <Text style={styles.title}>IMS Handheld</Text>
+            <Text style={styles.title}>AMS Handheld</Text>
             <Pressable style={styles.workArea} onPress={() => navigation.navigate('WorkQueueScreen')}><Text style={styles.workTitle}>Lifecycle Work Queue</Text><Text>Processing, Return and Swap</Text></Pressable>
             <Pressable style={styles.workArea} onPress={() => navigation.navigate('StockTakeQueueScreen')}><Text style={styles.workTitle}>Stock Take</Text><Text>Location audit and RFID counting</Text></Pressable>
         </View>

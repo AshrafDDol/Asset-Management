@@ -41,7 +41,7 @@ export const menuGroups = [
   {
     label: "Operations",
     items: [
-      { label: "Issue Batches", icon: ClipboardList, path: "/issue-batches" },
+      { label: "Asset Issue", icon: ClipboardList, path: "/issue-batches" },
       { label: "Stock Takes", icon: ClipboardList, path: "/stock-takes" },
       { label: "Asset Movement History", icon: MoveRight, path: "/asset-movements" },
     ],

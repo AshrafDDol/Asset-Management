@@ -30,7 +30,7 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
     return (
         <View style={styles.container}>
-            <Text style={styles.title}>Asset Management Test</Text>
+            <Text style={styles.title}>Asset Management System</Text>
             <TextInput autoCapitalize="none" placeholder="Username or email" value={username} onChangeText={setUsername} style={styles.input} />
             <TextInput secureTextEntry placeholder="Password" value={password} onChangeText={setPassword} style={styles.input} />
             {error && <Text style={styles.error}>{error}</Text>}
