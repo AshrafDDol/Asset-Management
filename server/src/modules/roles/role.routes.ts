@@ -1,7 +1,10 @@
 import { Router } from 'express';
+import { authMiddleware } from '../../middleware/authMiddleware';
 import { createRoleController, deleteRoleController, getRoleByIdController, getRolesController, updateRoleController } from './role.controller';
 
 const router = Router();
+
+router.use(authMiddleware);
 
 router.get('/', getRolesController);
 router.get('/:id', getRoleByIdController);

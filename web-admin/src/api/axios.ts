@@ -10,5 +10,25 @@ api.interceptors.request.use ((config) => {
     if(token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
-    return config; 
+    return config;
 });
+
+// An expired or rejected token would otherwise leave the app "logged in" with
+// every request failing. Clear it and send the user back to the login page.
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        const isLoginRequest = error.config?.url?.includes("/auth/login");
+
+        if (error.response?.status === 401 && !isLoginRequest) {
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
+
+            if (window.location.pathname !== "/login") {
+                window.location.replace("/login");
+            }
+        }
+
+        return Promise.reject(error);
+    }
+);

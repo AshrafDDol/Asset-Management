@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { authMiddleware } from '../../middleware/authMiddleware';
 import {
     getDepartmentsController,
     getDepartmentByIdController,
@@ -8,6 +9,8 @@ import {
 } from './department.controller';
 
 const router = Router();
+
+router.use(authMiddleware);
 
 router.get('/', getDepartmentsController);
 router.get('/:id', getDepartmentByIdController);

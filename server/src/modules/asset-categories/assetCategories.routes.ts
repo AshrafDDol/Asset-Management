@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { authMiddleware } from "../../middleware/authMiddleware";
 import { 
     getAssetCategoriesController, 
     getAssetCategoryByIdController, 
@@ -8,6 +9,8 @@ import {
 } from "./assetCategories.controller";
 
 const router = Router();
+
+router.use(authMiddleware);
 
 router.get("/", getAssetCategoriesController);
 router.get("/:id", getAssetCategoryByIdController);
