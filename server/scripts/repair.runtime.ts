@@ -21,9 +21,11 @@ async function main() {
 
   const staleTask = await prepareStartRepair({ assetId: staleAsset.id, reason: 'Stale scenario', repairLocationId: repairLocation.id }, userId); repairIds.push(staleTask.repairId);
   let current = await prisma.asset.findUniqueOrThrow({ where: { id: staleAsset.id } }); assert.equal(current.status, 'AVAILABLE'); assert.equal(current.locationId, home.id);
-  const staleBatch = await createIssueBatch({ assetIds: [staleAsset.id], jobNo: `REPAIR-STALE-${suffix}`, defaultRecipientUserId: userId, defaultToLocationId: operation.id }, userId); batchIds.push(staleBatch.id);
-  await assert.rejects(() => confirmRepairTask(staleTask.id, { epc: staleAsset.epc!.epcCode }, userId), /stale/i);
+  await assert.rejects(() => createIssueBatch({ assetIds: [staleAsset.id], jobNo: `REPAIR-LOCK-${suffix}`, defaultRecipientUserId: userId, defaultToLocationId: operation.id }, userId), /already prepared for Repair/i);
   assert.equal((await prisma.repairTask.findUniqueOrThrow({ where: { id: staleTask.id } })).status, 'PENDING');
+  assert.equal((await prisma.asset.findUniqueOrThrow({ where: { id: staleAsset.id } })).status, 'AVAILABLE');
+  await cancelRepairTask(staleTask.id, userId);
+  const unlockedBatch = await createIssueBatch({ assetIds: [staleAsset.id], jobNo: `REPAIR-UNLOCK-${suffix}`, defaultRecipientUserId: userId, defaultToLocationId: operation.id }, userId); batchIds.push(unlockedBatch.id);
 
   const cancelledTask = await prepareStartRepair({ assetId: cancelAsset.id, reason: 'Cancellation', repairLocationId: repairLocation.id }, userId); repairIds.push(cancelledTask.repairId);
   const cancelBefore = await prisma.asset.findUniqueOrThrow({ where: { id: cancelAsset.id } }); await cancelRepairTask(cancelledTask.id, userId); const cancelAfter = await prisma.asset.findUniqueOrThrow({ where: { id: cancelAsset.id } }); assert.deepEqual({ status: cancelAfter.status, locationId: cancelAfter.locationId }, { status: cancelBefore.status, locationId: cancelBefore.locationId });
@@ -59,7 +61,7 @@ async function main() {
   await assert.rejects(() => confirmRepairTask(completeTask.id, { epc: repairAsset.epc!.epcCode }, userId), /no longer pending/i);
   assert.equal(await prisma.assetMovement.count({ where: { assetId: repairAsset.id, movementType: 'REPAIR_TRANSFER' } }), 2);
   assert.equal(await prisma.assetAssignment.count({ where: { assetId: repairAsset.id } }), 0); assert.equal(await prisma.issueBatchItem.count({ where: { assetId: repairAsset.id } }), 0);
-  console.log(JSON.stringify({ passed: true, preparationNonMutating: true, issueBeforeStartAllowed: true, staleStartRejected: true, wrongEpcNonMutating: true, startRepair: true, startRepairMovement: true, duplicateStartMovementPrevented: true, underRepairIssueBlocked: true, underRepairSwapReplacementBlocked: true, completePreparationNonMutating: true, completeRepair: true, completeRepairMovement: true, duplicateCompleteMovementPrevented: true, durationFromTimestamps: true, pendingCancellationNonMutating: true, cancelledTaskCreatesNoMovement: true }, null, 2));
+  console.log(JSON.stringify({ passed: true, preparationNonMutating: true, pendingStartBlocksIssue: true, cancelledStartUnlocksIssue: true, wrongEpcNonMutating: true, startRepair: true, startRepairMovement: true, duplicateStartMovementPrevented: true, underRepairIssueBlocked: true, underRepairSwapReplacementBlocked: true, completePreparationNonMutating: true, completeRepair: true, completeRepairMovement: true, duplicateCompleteMovementPrevented: true, durationFromTimestamps: true, pendingCancellationNonMutating: true, cancelledTaskCreatesNoMovement: true }, null, 2));
 }
 main().finally(async () => {
   try {

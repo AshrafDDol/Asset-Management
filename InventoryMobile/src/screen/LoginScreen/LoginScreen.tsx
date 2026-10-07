@@ -37,6 +37,9 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
             <Pressable disabled={loading || !username.trim() || !password} onPress={submit} style={styles.button}>
                 {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
             </Pressable>
+            <Pressable onPress={() => navigation.navigate('RFIDSettingsScreen')} style={styles.settingsButton}>
+                <Text style={styles.settingsButtonText}>Server Settings</Text>
+            </Pressable>
         </View>
     );
 };
@@ -47,6 +50,8 @@ const styles = StyleSheet.create({
     input: { borderWidth: 1, borderColor: '#999', borderRadius: 4, padding: 12 },
     button: { backgroundColor: '#1f6feb', padding: 14, alignItems: 'center' },
     buttonText: { color: '#fff', fontWeight: '700' },
+    settingsButton: { padding: 12, alignItems: 'center' },
+    settingsButtonText: { color: '#1f6feb', fontWeight: '700' },
     error: { color: '#a51d1d' },
 });
 

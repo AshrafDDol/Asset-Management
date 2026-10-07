@@ -70,6 +70,9 @@ function unwrapData<T>(response: unknown): T {
 
 export type AssetFilters = Partial<{ assetCode: string; itemName: string; categoryId: number; locationId: number; homeLocationId: number; epc: string; condition: string; status: string; measurementHeight: number; measurementWidth: number; gridUp: number; radius: number; gapMm: number }>;
 
+export type AssetImportRow = { sourceRow: number; assetCode?: string; itemName?: string; categoryCode?: string; storageLocationCode?: string; measurementHeight?: string | number | null; measurementWidth?: string | number | null; gridUp?: string | number | null; radius?: string | number | null; gapMm?: string | number | null; serialNumber?: string; brand?: string; model?: string; purchaseDate?: string; purchaseCost?: string | number | null; condition?: string; epc?: string; autoGenerateEpc?: boolean | string; remarks?: string };
+export type AssetImportValidation = { valid: boolean; rowCount: number; rows: Array<{ sourceRow: number; assetCode: string; itemName: string; categoryCode: string; storageLocationCode: string; epc: string; valid: boolean; errors: string[] }>; importedCount?: number; assets?: Array<{ id: number; assetCode: string; epcCode: string | null }> };
+
 export async function getAssetsApi(filters: AssetFilters = {}): Promise<Asset[]> {
     const response = await api.get('/assets', { params: filters });
     return unwrapData<Asset[]>(response);
@@ -91,6 +94,16 @@ export async function updateAssetApi(
 ): Promise<Asset> {
     const response = await api.patch(`/assets/${id}`, payload);
     return unwrapData<Asset>(response);
+}
+
+export async function validateAssetImportApi(rows: AssetImportRow[]) {
+    const response = await api.post('/assets/import/validate', { rows });
+    return unwrapData<AssetImportValidation>(response);
+}
+
+export async function importAssetsApi(rows: AssetImportRow[]) {
+    const response = await api.post('/assets/import', { rows });
+    return unwrapData<AssetImportValidation>(response);
 }
 
 export async function deleteAssetApi(id: number): Promise<Pick<Asset, "id" | "assetCode">> {

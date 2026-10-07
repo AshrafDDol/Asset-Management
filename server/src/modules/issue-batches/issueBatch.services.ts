@@ -10,6 +10,8 @@ import {
   LocationType,
   MovementType,
   Prisma,
+  RepairAction,
+  RepairTaskStatus,
 } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AppError } from "../../utils/AppError";
@@ -93,6 +95,15 @@ async function eligibleAsset(tx: Prisma.TransactionClient, assetId: number) {
   if (!asset.homeLocation?.isActive) reasons.push("active home location is unresolved");
   if (reasons.length) throw new AppError(`${asset.assetCode} is not eligible: ${reasons.join(", ")}`, 409);
   await validateHomeLocation(tx, asset.homeLocationId);
+  const pendingStartRepair = await tx.repairTask.findFirst({
+    where: {
+      action: RepairAction.START_REPAIR,
+      status: RepairTaskStatus.PENDING,
+      repair: { assetId },
+    },
+    select: { id: true },
+  });
+  if (pendingStartRepair) throw new AppError(`${asset.assetCode} is already prepared for Repair.`, 409);
   const activeItem = await tx.issueBatchItem.findFirst({ where: { assetId, status: { in: ACTIVE_ITEM_STATUSES } } });
   const activeAssignment = await tx.assetAssignment.findFirst({ where: { assetId, status: AssignmentStatus.ACTIVE, isActive: true } });
   if (activeItem || activeAssignment) throw new AppError(`${asset.assetCode} already has an operational claim`, 409);
@@ -119,17 +130,26 @@ export async function getPendingHandheldIssues() {
     orderBy: { createdAt: "asc" },
   });
 
-  return batches.map((batch) => ({
-    id: batch.id,
-    batchNo: batch.batchNo,
-    jobNo: batch.jobNo,
-    status: batch.status,
-    recipient: batch.defaultRecipient,
-    toLocation: batch.defaultToLocation,
-    expectedAssetCount: batch.items.filter((item) => item.status === IssueBatchItemStatus.ISSUED && item.handheldSwapTasks.length === 0).length,
-    confirmedAssetCount: batch.items.filter((item) => item.status === IssueBatchItemStatus.CONFIRMED).length,
-    createdAt: batch.createdAt,
-  }));
+  return batches.map((batch) => {
+    const expectedItems = batch.items.filter(
+      (item) => item.status === IssueBatchItemStatus.ISSUED && item.handheldSwapTasks.length === 0
+    );
+    const firstDestination = expectedItems[0]?.toLocation ?? null;
+    const toLocation = firstDestination && expectedItems.every(
+      (item) => item.toLocationId === firstDestination.id
+    ) ? firstDestination : null;
+    return {
+      id: batch.id,
+      batchNo: batch.batchNo,
+      jobNo: batch.jobNo,
+      status: batch.status,
+      recipient: batch.defaultRecipient,
+      toLocation,
+      expectedAssetCount: expectedItems.length,
+      confirmedAssetCount: batch.items.filter((item) => item.status === IssueBatchItemStatus.CONFIRMED).length,
+      createdAt: batch.createdAt,
+    };
+  });
 }
 
 export async function getHandheldIssue(batchId: number) {
@@ -154,6 +174,10 @@ export async function getHandheldIssue(batchId: number) {
       toLocation: item.toLocation,
       status: item.status,
     }));
+  const firstDestination = expectedItems[0]?.toLocation ?? null;
+  const toLocation = firstDestination && expectedItems.every(
+    (item) => item.toLocation?.id === firstDestination.id
+  ) ? firstDestination : null;
 
   return {
     id: batch.id,
@@ -161,7 +185,7 @@ export async function getHandheldIssue(batchId: number) {
     jobNo: batch.jobNo,
     status: batch.status,
     recipient: batch.defaultRecipient,
-    toLocation: batch.defaultToLocation,
+    toLocation,
     expectedAssetCount: expectedItems.length,
     expectedItems,
   };

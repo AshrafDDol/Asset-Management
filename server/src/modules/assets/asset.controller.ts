@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import { successResponse } from "../../utils/apiResponse";
 import { createAsset, updateAsset, deleteAsset, getAllAssets, getAssetById } from "./asset.service";
 import { AppError } from "../../utils/AppError";
+import { importAssets, validateAssetImport } from "./asset-import.service";
 
 export async function getAssetsController (
     req: Request,
@@ -51,6 +52,18 @@ export async function getAssetsController (
     } catch (error) {
         next(error);
     }
+}
+
+export async function validateAssetImportController(req: Request, res: Response, next: NextFunction) {
+    try { return successResponse(res, "Asset import validated", await validateAssetImport(req.body?.rows)); } catch (error) { next(error); }
+}
+
+export async function importAssetsController(req: Request, res: Response, next: NextFunction) {
+    try {
+        const result = await importAssets(req.body?.rows);
+        if (!result.valid) return res.status(400).json({ success: false, message: "Asset import contains validation errors", data: result });
+        return successResponse(res, "Assets imported successfully", result, 201);
+    } catch (error) { next(error); }
 }
 
 export async function getAssetByIdController (

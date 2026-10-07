@@ -72,8 +72,8 @@ export function AppSidebar() {
                   <Warehouse className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">Evolve Inventory</span>
-                  <span className="truncate text-xs text-muted-foreground">Inventory Admin</span>
+                  <span className="truncate font-semibold">Evolve Assets</span>
+                  <span className="truncate text-xs text-muted-foreground">Asset Admin</span>
                 </div>
               </NavLink>
             </SidebarMenuButton>

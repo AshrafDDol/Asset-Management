@@ -54,6 +54,7 @@ import { chronological, type ListOrder } from "../utils/listOrder";
 import { locationDisplayName } from "../utils/locationDisplay";
 import { AssetColumnSelector } from "../components/AssetColumnSelector";
 import { AssetDetailsModal } from "../components/AssetDetailsModal";
+import { AssetImportDialog } from "../components/AssetImportDialog";
 import { getRepairsApi, prepareCompleteRepairApi, prepareStartRepairApi, type AssetRepair } from "../api/repairs.api";
 import {
   displayValue,
@@ -131,16 +132,34 @@ function PrepareIssueDialog({
   close: () => void;
   complete: (count: number, message?: string) => Promise<void>;
 }) {
+  const [sessionDefaults] = useState(() => {
+    const initialDestination = locations
+      .filter(operational)
+      .sort((left, right) =>
+        (left.displayPath || left.name).localeCompare(right.displayPath || right.name)
+      )[0];
+    return {
+      assets,
+      destination: initialDestination ? String(initialDestination.id) : "",
+    };
+  });
   const [users, setUsers] = useState<User[]>([]);
   const [batches, setBatches] = useState<IssueBatch[]>([]);
   const [jobNo, setJobNo] = useState("");
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
   const [remarks, setRemarks] = useState("");
   const [recipient, setRecipient] = useState("");
-  const [destination, setDestination] = useState("");
+  const [destination, setDestination] = useState(sessionDefaults.destination);
   const [rows, setRows] = useState<
     Record<number, { recipient: string; destination: string }>
-  >({});
+  >(() =>
+    Object.fromEntries(
+      sessionDefaults.assets.map((asset) => [
+        asset.id,
+        { recipient: "", destination: sessionDefaults.destination },
+      ])
+    )
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [swapOpen, setSwapOpen] = useState(false);
@@ -154,9 +173,26 @@ function PrepareIssueDialog({
       .then(([loadedUsers, loadedBatches]) => {
         setUsers(loadedUsers);
         setBatches(loadedBatches);
+        const initialRecipient = loadedUsers.find((user) => user.isActive !== false);
+        if (initialRecipient) {
+          const initialRecipientId = String(initialRecipient.id);
+          setRecipient(initialRecipientId);
+          setRows((current) =>
+            Object.fromEntries(
+              sessionDefaults.assets.map((asset) => [
+                asset.id,
+                {
+                  recipient: initialRecipientId,
+                  destination:
+                    current[asset.id]?.destination || sessionDefaults.destination,
+                },
+              ])
+            )
+          );
+        }
       })
       .catch((caught) => setError(apiError(caught)));
-  }, []);
+  }, [sessionDefaults]);
   useErrorToast(error);
 
   const apply = (field: "recipient" | "destination", value: string) => {
@@ -439,7 +475,7 @@ function PrepareIssueDialog({
                 ))}
             </div>
 
-            <Field label="Apply Recipient to all" htmlFor="prepare-recipient">
+            <Field label="Recipient" htmlFor="prepare-recipient">
               <SelectField
                 id="prepare-recipient"
                 value={recipient}
@@ -452,7 +488,7 @@ function PrepareIssueDialog({
               />
             </Field>
 
-            <Field label="Apply To Location to all">
+            <Field label="To Location">
               <LocationTreeSelect
                 locations={locations}
                 selectedLocationId={destination}
@@ -1095,6 +1131,7 @@ export function AssetsPages() {
     }
   });
   const [assetFormOpen, setAssetFormOpen] = useState(false);
+  const [assetImportOpen, setAssetImportOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [preparing, setPreparing] = useState(false);
@@ -1148,8 +1185,21 @@ export function AssetsPages() {
   const editingAsset = assets.find((asset) => asset.id === editingAssetId);
   const activeRepairByAsset = new Map(repairs.filter(repair => repair.status === "IN_PROGRESS").map(repair => [repair.asset.id, repair]));
   const pendingRepairByAsset = new Map(repairs.flatMap(repair => repair.tasks.filter(task => task.status === "PENDING").map(task => [repair.asset.id, task] as const)));
+  const assetStatusLabel = (asset: Asset) => {
+    const pendingRepair = pendingRepairByAsset.get(asset.id);
+    if (asset.status === "AVAILABLE" && pendingRepair?.action === "START_REPAIR") return "Prepared for Repair";
+    if (asset.status === "UNDER_REPAIR" && pendingRepair?.action === "COMPLETE_REPAIR") return "Prepared Complete Repair";
+    return asset.status
+      ? asset.status.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+      : "";
+  };
   const selectionEligibility = (asset: Asset) => {
-    if (asset.status === "AVAILABLE") return eligibility(asset);
+    if (asset.status === "AVAILABLE") {
+      const reason = eligibility(asset);
+      if (reason) return reason;
+      if (pendingRepairByAsset.get(asset.id)?.action === "START_REPAIR") return "Asset is already prepared for Repair";
+      return "";
+    }
     if (asset.status === "UNDER_REPAIR") {
       if (asset.isActive === false) return "Asset is inactive";
       if (!hasActiveEpc(asset)) return "Active EPC is missing";
@@ -1165,10 +1215,15 @@ export function AssetsPages() {
   const someEligibleVisibleSelected = selectedEligibleVisible.length > 0 && !allEligibleVisibleSelected;
   const selectedAvailable = selectedAssets.length > 0 && selectedAssets.every((asset) => asset.status === "AVAILABLE");
   const selectedUnderRepair = selectedAssets.length > 0 && selectedAssets.every((asset) => asset.status === "UNDER_REPAIR");
+  const selectedHasPendingStartRepair = selectedAssets.some(
+    (asset) => pendingRepairByAsset.get(asset.id)?.action === "START_REPAIR"
+  );
   const mixedPreparationState = selectedAssets.length > 0 && !selectedAvailable && !selectedUnderRepair;
   const unsupportedRepairBatch = selectedUnderRepair && selectedAssets.length !== 1;
-  const prepareDisabled = !selectedAssets.length || mixedPreparationState || unsupportedRepairBatch;
-  const prepareTitle = mixedPreparationState
+  const prepareDisabled = !selectedAssets.length || mixedPreparationState || unsupportedRepairBatch || selectedHasPendingStartRepair;
+  const prepareTitle = selectedHasPendingStartRepair
+    ? "An Asset is already prepared for Repair."
+    : mixedPreparationState
     ? "Selected assets must have the same preparation state."
     : unsupportedRepairBatch
       ? "Select exactly one Asset to prepare Repair completion."
@@ -1231,10 +1286,7 @@ export function AssetsPages() {
       case "status":
         return asset.status ? (
           <Badge variant="secondary" className="whitespace-nowrap">
-            {asset.status
-              .toLowerCase()
-              .replaceAll("_", " ")
-              .replace(/\b\w/g, (letter) => letter.toUpperCase())}
+            {assetStatusLabel(asset)}
           </Badge>
         ) : (
           "—"
@@ -1867,6 +1919,21 @@ export function AssetsPages() {
           </form>
 
           <DialogFooter className="mx-0 mb-0 shrink-0 px-6 py-5">
+            {!isEditing && (
+              <Button
+                variant="outline"
+                type="button"
+                className="mr-auto"
+                disabled={saving}
+                onClick={() => {
+                  handleCancelEdit();
+                  setAssetFormOpen(false);
+                  setAssetImportOpen(true);
+                }}
+              >
+                Import Assets
+              </Button>
+            )}
             {isEditing && (
               <Button
                 variant="destructive"
@@ -1895,6 +1962,14 @@ export function AssetsPages() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AssetImportDialog
+        open={assetImportOpen}
+        categories={assetCategories}
+        locations={locations}
+        onOpenChange={setAssetImportOpen}
+        onImported={loadPageData}
+      />
 
       {repairAsset && (
         <PrepareRepairDialog
@@ -1997,6 +2072,7 @@ export function AssetsPages() {
 
       <AssetDetailsModal
         asset={viewAsset}
+        statusLabel={viewAsset ? assetStatusLabel(viewAsset) : undefined}
         repairs={viewAsset ? repairs.filter((repair) => repair.asset.id === viewAsset.id && ["IN_PROGRESS", "COMPLETED"].includes(repair.status)) : []}
         close={() => setViewAsset(null)}
       />

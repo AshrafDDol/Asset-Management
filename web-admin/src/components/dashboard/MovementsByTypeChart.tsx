@@ -11,13 +11,14 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 
-const SERIES_COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-];
+const MOVEMENT_TYPE_COLORS: Record<string, string> = {
+  LOCATION_TRANSFER: "var(--chart-1)",
+  REPAIR_TRANSFER: "var(--chart-5)",
+  DEPARTMENT_TRANSFER: "var(--chart-3)",
+  FULL_TRANSFER: "var(--chart-4)",
+};
+
+const FALLBACK_MOVEMENT_TYPE_COLOR = "var(--chart-2)";
 
 type BarShapeProps = { payload?: Record<string, number> };
 
@@ -58,11 +59,11 @@ export function MovementsByTypeChart({
   const bucketCount = Math.max(1, Math.ceil(days / step));
   const series = [...new Set(movements.map((movement) => movement.movementType))].sort();
   const config = Object.fromEntries(
-    series.map((movementType, index) => [
+    series.map((movementType) => [
       movementType,
       {
         label: movementTypeLabel(movementType),
-        color: SERIES_COLORS[index % SERIES_COLORS.length],
+        color: MOVEMENT_TYPE_COLORS[movementType] ?? FALLBACK_MOVEMENT_TYPE_COLOR,
       },
     ])
   ) satisfies ChartConfig;
@@ -116,7 +117,7 @@ export function MovementsByTypeChart({
                 key={movementType}
                 dataKey={movementType}
                 stackId="movements"
-                fill={`var(--color-${series})`}
+                fill={`var(--color-${movementType})`}
                 // 2px surface gap between stacked segments.
                 stroke="var(--color-card)"
                 strokeWidth={2}

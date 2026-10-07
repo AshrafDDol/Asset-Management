@@ -4,7 +4,7 @@ import { randomBytes } from "crypto";
 import { AppError } from "../../utils/AppError";
 import { CreateAssetEpcInput, ManageAssetEpcInput, UpdateAssetEpcInput } from "./assetEpc.types";
 
-const GENERATED_EPC_BYTES = 12;
+const GENERATED_EPC_BYTES = 8;
 const EPC_MUTABLE_ASSET_STATUSES: AssetStatus[] = [AssetStatus.AVAILABLE, AssetStatus.RESERVED];
 
 const ASSET_EPC_SELECT = {

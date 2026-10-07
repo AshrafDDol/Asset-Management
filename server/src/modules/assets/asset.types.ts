@@ -40,3 +40,25 @@ export type AssetFilters = {
     radius?: number;
     gapMm?: number;
 };
+
+export type AssetImportRowInput = {
+    sourceRow: number;
+    assetCode?: string;
+    itemName?: string;
+    categoryCode?: string;
+    storageLocationCode?: string;
+    measurementHeight?: string | number | null;
+    measurementWidth?: string | number | null;
+    gridUp?: string | number | null;
+    radius?: string | number | null;
+    gapMm?: string | number | null;
+    serialNumber?: string;
+    brand?: string;
+    model?: string;
+    purchaseDate?: string;
+    purchaseCost?: string | number | null;
+    condition?: string;
+    epc?: string;
+    autoGenerateEpc?: boolean | string;
+    remarks?: string;
+};

@@ -6,6 +6,8 @@ import {
   getAssetByIdController,
   getAssetsController,
   updateAssetController,
+  validateAssetImportController,
+  importAssetsController,
 } from "./asset.controller";
 
 const router = Router();
@@ -13,6 +15,8 @@ const router = Router();
 router.use(authMiddleware);
 
 router.get("/", getAssetsController);
+router.post("/import/validate", validateAssetImportController);
+router.post("/import", importAssetsController);
 router.get("/:id", getAssetByIdController);
 router.post("/", createAssetController);
 router.patch("/:id", updateAssetController);

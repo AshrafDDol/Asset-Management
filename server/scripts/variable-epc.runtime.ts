@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { prisma } from '../src/config/prisma';
 import { createAsset } from '../src/modules/assets/asset.service';
-import { validateNewEpcCode } from '../src/modules/asset-epcs/assetEpc.services';
+import { generateEpcCode, validateNewEpcCode } from '../src/modules/asset-epcs/assetEpc.services';
 import { confirmBatchItemIssue, createIssueBatch } from '../src/modules/issue-batches/issueBatch.services';
 import { createStockTake, recordStockTakeScans } from '../src/modules/stock-takes/stockTake.services';
 
@@ -16,6 +16,9 @@ async function main() {
   const location = await prisma.location.create({ data: { locationCode: `VEH${suffix.slice(-7)}`, name: 'Variable EPC Rack', locationType: 'STORAGE' } }); locationId = location.id;
   const destination = await prisma.location.create({ data: { locationCode: `VED${suffix.slice(-7)}`, name: 'Variable EPC Destination', locationType: 'OPERATION' } }); destinationId = destination.id;
   assert.deepEqual(REQUIRED_EXAMPLES.map(validateNewEpcCode), REQUIRED_EXAMPLES);
+  const generated = Array.from({ length: 100 }, generateEpcCode);
+  assert.ok(generated.every(epc => epc.length === 16 && /^[0-9A-F]{16}$/.test(epc)));
+  assert.equal(new Set(generated).size, generated.length);
   for (const [index, epcCode] of EPC_CASES.entries()) {
     const asset = await createAsset({ assetCode: `VE-${suffix}-${index}`, itemName: `Variable EPC ${epcCode.length}`, categoryId, locationId, epcCode: `  ${epcCode.toLowerCase()}  ` });
     assetIds.push(asset.id); assert.equal(asset.epc?.epcCode, epcCode);
@@ -32,7 +35,7 @@ async function main() {
   await assert.rejects(() => confirmBatchItemIssue(batch.items[0].id, EPC_CASES[1], undefined, userId), /does not match/);
   await confirmBatchItemIssue(batch.items[0].id, ` ${EPC_CASES[0].toLowerCase()} `, undefined, userId);
   assert.equal((await prisma.asset.findUniqueOrThrow({ where: { id: assetIds[0] } })).status, 'IN_USE');
-  console.log(JSON.stringify({ passed: true, acceptedLengths: EPC_CASES.map(epc => epc.length), invalidNonHexRejected: true, invalidOddRejected: true, emptyRejected: true, exactMismatchRejected: true, normalizedExactMatch: true, stockTakeShortEpcFound: true }, null, 2));
+  console.log(JSON.stringify({ passed: true, generatedLength: generated[0].length, generatedSampleUnique: true, acceptedLengths: EPC_CASES.map(epc => epc.length), invalidNonHexRejected: true, invalidOddRejected: true, emptyRejected: true, exactMismatchRejected: true, normalizedExactMatch: true, stockTakeShortEpcFound: true }, null, 2));
 }
 main().finally(async () => {
   try {

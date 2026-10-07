@@ -36,7 +36,7 @@ const formatDuration = (durationMs?: number | null) => {
 };
 const friendly = (value: string) => value.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 
-export function AssetDetailsModal({ asset, repairs = [], close }: { asset: Asset | null; repairs?: AssetRepair[]; close: () => void }) {
+export function AssetDetailsModal({ asset, repairs = [], statusLabel, close }: { asset: Asset | null; repairs?: AssetRepair[]; statusLabel?: string; close: () => void }) {
   return (
     <Dialog open={!!asset} onOpenChange={(open) => { if (!open) close(); }}>
       <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
@@ -117,7 +117,7 @@ export function AssetDetailsModal({ asset, repairs = [], close }: { asset: Asset
               <Separator />
 
               <Section title="System">
-                <DetailField label="Status" value={asset.status} />
+                <DetailField label="Status" value={statusLabel || asset.status} />
                 <DetailField label="Active" value={asset.isActive === false ? "No" : "Yes"} />
                 <DetailField label="Created At" value={asset.createdAt ? new Date(asset.createdAt).toLocaleString() : null} />
                 <DetailField label="Updated At" value={asset.updatedAt ? new Date(asset.updatedAt).toLocaleString() : null} />

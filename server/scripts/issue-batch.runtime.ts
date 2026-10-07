@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { prisma } from "../src/config/prisma";
 import { createAsset, getAllAssets } from "../src/modules/assets/asset.service";
 import { getAllAssetMovements } from "../src/modules/asset-movements/assetMovement.services";
-import { addAssetsToIssueBatch, cancelIssueBatch, cancelIssuedBatchItem, compareBatchScans, confirmBatchItemIssue, createIssueBatch, returnScan } from "../src/modules/issue-batches/issueBatch.services";
+import { addAssetsToIssueBatch, cancelIssueBatch, cancelIssuedBatchItem, compareBatchScans, confirmBatchItemIssue, createIssueBatch, getHandheldIssue, getPendingHandheldIssues, returnScan } from "../src/modules/issue-batches/issueBatch.services";
 
 const suffix = Date.now().toString();
 const assetIds: number[] = []; const batchIds: number[] = []; const locationIds: number[] = [];
@@ -27,6 +27,8 @@ async function main() {
   const initialBatchCount = await prisma.issueBatch.count();
   const initialBatch = await createIssueBatch({ assetIds: assets.slice(0, 2).map((a) => a.id), jobNo: ` JOB-${suffix} `, defaultRecipientUserId: user.id, defaultToLocationId: operationA.id }, user.id); batchIds.push(initialBatch.id);
   assert.equal(initialBatch.jobNo, `JOB-${suffix}`);
+  assert.equal((await getHandheldIssue(initialBatch.id)).toLocation?.id, operationA.id);
+  assert.equal((await getPendingHandheldIssues()).find((item) => item.id === initialBatch.id)?.toLocation?.id, operationA.id);
   const originalItemIds = initialBatch.items.map((item) => item.id);
   const batch = await addAssetsToIssueBatch(initialBatch.id, { assetIds: [assets[2].id], jobNo: `job-${suffix}`, defaultRecipientUserId: user.id, defaultToLocationId: operationA.id, items: [{ assetId: assets[2].id, toLocationId: operationB.id }] }, user.id);
   assert.equal(await prisma.issueBatch.count(), initialBatchCount + 1);
@@ -41,6 +43,10 @@ async function main() {
   assert.deepEqual(batch.items.map((item) => item.asset.status), ["PENDING_CONFIRMATION", "PENDING_CONFIRMATION", "PENDING_CONFIRMATION"]);
   assert.ok(batch.items.every((item) => item.assignment?.status === "ACTIVE" && item.assignment.isActive));
   assert.equal(batch.items.find((item) => item.assetId === assets[2].id)!.toLocationId, operationB.id);
+  const mixedHandheldIssue = await getHandheldIssue(batch.id);
+  assert.equal(mixedHandheldIssue.toLocation, null);
+  assert.equal(mixedHandheldIssue.expectedItems.find((item) => item.assetId === assets[2].id)?.toLocation?.id, operationB.id);
+  assert.equal((await getPendingHandheldIssues()).find((item) => item.id === batch.id)?.toLocation, null);
 
   const beforeConflictBatches = await prisma.issueBatch.count();
   await assert.rejects(() => createIssueBatch({ assetIds: [assets[0].id, assets[3].id], jobNo: `CONFLICT-${suffix}`, defaultRecipientUserId: user.id, defaultToLocationId: operationA.id }, user.id));
