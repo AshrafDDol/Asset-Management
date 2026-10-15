@@ -16,7 +16,8 @@ app.use(
     })
 );
 
-app.use(express.json());
+// Asset import posts its rows as JSON; the 100kb default rejects large files.
+app.use(express.json({ limit: "10mb" }));
 
 app.use("/api", router);
 app.use(errorMiddleware);

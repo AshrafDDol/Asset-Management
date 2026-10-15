@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { authMiddleware } from "../../middleware/authMiddleware";
 import {
     createLocationController,
     updateLocationController,
@@ -10,6 +11,8 @@ import {
 } from "./location.controller";
 
 const router = Router();
+
+router.use(authMiddleware);
 
 router.get("/", getLocationsController);
 router.get("/tree", getLocationTreeController);

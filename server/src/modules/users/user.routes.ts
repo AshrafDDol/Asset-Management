@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { authMiddleware } from "../../middleware/authMiddleware";
 import {
   createUserController,
   deleteUserController,
@@ -8,6 +9,8 @@ import {
 } from "./user.controller";
 
 const router = Router();
+
+router.use(authMiddleware);
 
 router.get("/", getUsersController);
 router.get("/:id", getUserByIdController);
