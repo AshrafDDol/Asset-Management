@@ -13,6 +13,7 @@ import {
 
 import { testBackendConnection } from '../../api/client';
 import IMSRFIDService from '../../services/rfid/IMSRFIDService';
+import { invalidateScanFeedbackSettings } from '../../services/feedback/ScanFeedbackService';
 import {
   DEFAULT_BACKEND_URL,
   isValidBackendUrl,
@@ -89,6 +90,7 @@ const RFIDSettingsScreen: React.FC = () => {
         soundEnabled,
         vibrationEnabled,
       });
+      invalidateScanFeedbackSettings();
       setSavedPower(persisted.rfidPower);
 
       const result = await IMSRFIDService.applyPowerWhenReady(
