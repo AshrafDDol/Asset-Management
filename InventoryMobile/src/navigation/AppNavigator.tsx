@@ -18,6 +18,8 @@ import RepairScanScreen from '../screen/RepairScanScreen/RepairScanScreen';
 import ReturnQueueScreen from '../screen/ReturnQueueScreen/ReturnQueueScreen';
 import SwapQueueScreen from '../screen/SwapQueueScreen/SwapQueueScreen';
 import RFIDSettingsScreen from '../screen/RFIDSettingsScreen/RFIDSettingsScreen';
+import RFIDRSSIDiagnosticScreen from '../screen/RFIDRSSIDiagnosticScreen/RFIDRSSIDiagnosticScreen';
+import FindAssetScreen from '../screen/FindAssetScreen/FindAssetScreen';
 
 const Stack = createNativeStackNavigator<ScreenStackParamList>();
 
@@ -27,6 +29,8 @@ const AppNavigator: React.FC = () => {
             <Stack.Screen name="LoginScreen" component={LoginScreen} />
             <Stack.Screen name="HomeScreen" component={HomeScreen} />
             <Stack.Screen name="RFIDSettingsScreen" component={RFIDSettingsScreen} options={{ title: 'RFID Settings' }} />
+            <Stack.Screen name="RFIDRSSIDiagnosticScreen" component={RFIDRSSIDiagnosticScreen} options={{ title: 'RFID RSSI Diagnostic' }} />
+            <Stack.Screen name="FindAssetScreen" component={FindAssetScreen} options={{ title: 'Find Asset' }} />
             <Stack.Screen
                 name="RFIDDiagnosticScreen"
                 component={RFIDDiagnosticScreen}

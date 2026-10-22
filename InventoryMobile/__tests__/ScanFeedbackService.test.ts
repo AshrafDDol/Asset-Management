@@ -82,4 +82,32 @@ describe('ScanFeedbackService', () => {
     expect(mockPlayScanSound).not.toHaveBeenCalled();
     expect(mockVibrate).not.toHaveBeenCalled();
   });
+
+  it('provides generation-safe Find Asset vibration and beep feedback', async () => {
+    const {
+      playFindAssetBeep,
+      playFindAssetStartVibration,
+    } = require('../src/services/feedback/ScanFeedbackService');
+
+    await playFindAssetStartVibration(() => true);
+    await playFindAssetBeep(() => true);
+    await playFindAssetStartVibration(() => false);
+    await playFindAssetBeep(() => false);
+
+    expect(mockVibrate).toHaveBeenCalledTimes(1);
+    expect(mockVibrate).toHaveBeenCalledWith(50);
+    expect(mockPlayScanSound).toHaveBeenCalledTimes(1);
+  });
+
+  it('respects disabled sound for Find Asset beeps', async () => {
+    mockLoadRFIDSettings.mockResolvedValue({
+      ...enabledSettings,
+      soundEnabled: false,
+    });
+    const { playFindAssetBeep } = require('../src/services/feedback/ScanFeedbackService');
+
+    await playFindAssetBeep(() => true);
+
+    expect(mockPlayScanSound).not.toHaveBeenCalled();
+  });
 });

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   ActivityIndicator,
   Pressable,
@@ -13,6 +14,7 @@ import {
 
 import { testBackendConnection } from '../../api/client';
 import IMSRFIDService from '../../services/rfid/IMSRFIDService';
+import { ScreenStackParamList } from '../../navigation/types';
 import { invalidateScanFeedbackSettings } from '../../services/feedback/ScanFeedbackService';
 import {
   DEFAULT_BACKEND_URL,
@@ -34,7 +36,9 @@ const POWER_OPTIONS = Array.from(
   (_, index) => RFID_POWER_MIN + index,
 );
 
-const RFIDSettingsScreen: React.FC = () => {
+type Props = NativeStackScreenProps<ScreenStackParamList, 'RFIDSettingsScreen'>;
+
+const RFIDSettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [savedPower, setSavedPower] = useState(DEFAULT_RFID_POWER);
   const [selectedPower, setSelectedPower] = useState(DEFAULT_RFID_POWER);
   const [readerPower, setReaderPower] = useState<number | null>(null);
@@ -159,6 +163,18 @@ const RFIDSettingsScreen: React.FC = () => {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>RFID Settings</Text>
+        <View style={styles.card}>
+          <Text style={styles.label}>Diagnostics</Text>
+          <Text style={styles.reader}>
+            Measure repeated raw RSSI values for one EPC using the physical trigger.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => navigation.navigate('RFIDRSSIDiagnosticScreen')}
+            style={styles.changeButton}>
+            <Text style={styles.changeButtonText}>Open RFID RSSI Diagnostic</Text>
+          </Pressable>
+        </View>
         <View style={styles.card}>
           <Text style={styles.label}>Server Connection</Text>
           <Text style={styles.fieldLabel}>Backend URL</Text>

@@ -3,6 +3,8 @@ export type ScreenStackParamList = {
     LoginScreen: undefined;
     RFIDDiagnosticScreen: undefined;
     RFIDSettingsScreen: undefined;
+    RFIDRSSIDiagnosticScreen: undefined;
+    FindAssetScreen: undefined;
     PendingIssuesScreen: undefined;
     IssueConfirmationScreen: { issueId: number };
     WorkQueueScreen: undefined;

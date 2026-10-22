@@ -70,3 +70,32 @@ export const playAcceptedScanFeedback = async (): Promise<void> => {
     // Feedback must never interrupt scan acceptance or business processing.
   }
 };
+
+export const playFindAssetStartVibration = async (isGenerationActive: () => boolean): Promise<void> => {
+  try {
+    const settings = await cachedSettings();
+    if (settings.vibrationEnabled && isGenerationActive()) Vibration.vibrate(50);
+  } catch {
+    // Proximity feedback must never interrupt RFID lifecycle handling.
+  }
+};
+
+export const playFindAssetBeep = async (isGenerationActive: () => boolean): Promise<void> => {
+  try {
+    const settings = await cachedSettings();
+    const generationActive = isGenerationActive();
+    const nativeAvailable = Boolean(nativeFeedback);
+    console.info('[FindAssetAudio] beep attempt', {
+      soundEnabled: settings.soundEnabled,
+      generationActive,
+      nativeAvailable,
+      platform: Platform.OS,
+    });
+    if (settings.soundEnabled && Platform.OS === 'android' && generationActive) {
+      if (nativeFeedback) nativeFeedback.playScanSound();
+      else console.warn('[FindAssetAudio] native sound module is unavailable');
+    }
+  } catch (error) {
+    console.warn('[FindAssetAudio] beep failed', error);
+  }
+};

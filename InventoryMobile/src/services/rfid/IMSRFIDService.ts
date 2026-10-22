@@ -41,6 +41,7 @@ interface NativeIMSRFIDModule {
 }
 
 type TagsListener = (tags: RFIDTag[]) => void;
+export type RFIDObservationListener = (tag: RFIDTag) => void;
 type TriggerListener = (event: RFIDTriggerEvent) => void;
 type ErrorListener = (message: string) => void;
 
@@ -59,6 +60,7 @@ class IMSRFIDService {
 
   private nativeSubscriptions: EmitterSubscription[] = [];
   private tagListeners = new Set<TagsListener>();
+  private observationListeners = new Set<RFIDObservationListener>();
   private triggerListeners = new Set<TriggerListener>();
   private errorListeners = new Set<ErrorListener>();
   private sessionTags = new Map<string, RFIDTag>();
@@ -67,6 +69,7 @@ class IMSRFIDService {
   private releaseRequested = false;
   private startIntentPending = false;
   private stopRequested = false;
+  private manualScanIntent = false;
   private operationQueue: Promise<void> = Promise.resolve();
 
   constructor() {
@@ -179,6 +182,20 @@ class IMSRFIDService {
     });
   }
 
+  async startManualScan(): Promise<boolean> {
+    this.manualScanIntent = true;
+    this.startIntentPending = true;
+    const started = await this.startScan();
+    if (!started && this.state !== 'SCANNING') this.manualScanIntent = false;
+    return started;
+  }
+
+  async stopManualScan(): Promise<boolean> {
+    this.manualScanIntent = false;
+    if (this.activeTriggerKeys.size > 0) return true;
+    return this.stopScan();
+  }
+
   async isScanning(): Promise<boolean> {
     return this.enqueueOperation(async () => {
       if (!nativeModule || this.state !== 'SCANNING') {
@@ -235,6 +252,19 @@ class IMSRFIDService {
     return () => this.tagListeners.delete(listener);
   }
 
+  onTargetObservations(
+    targetEpc: string,
+    listener: RFIDObservationListener,
+  ): () => void {
+    this.attachNativeSubscriptions();
+    const normalizedTarget = targetEpc.trim().toUpperCase();
+    const targetListener: RFIDObservationListener = tag => {
+      if (normalizedTarget && tag.epc === normalizedTarget) listener(tag);
+    };
+    this.observationListeners.add(targetListener);
+    return () => this.observationListeners.delete(targetListener);
+  }
+
   onTrigger(listener: TriggerListener): () => void {
     this.attachNativeSubscriptions();
     this.triggerListeners.add(listener);
@@ -256,6 +286,7 @@ class IMSRFIDService {
     this.startIntentPending = false;
     this.stopRequested = true;
     this.activeTriggerKeys.clear();
+    this.manualScanIntent = false;
     return this.enqueueOperation(async () => {
       if (!nativeModule || this.state === 'CLOSED' || this.state === 'CLOSING') {
         this.state = 'CLOSED';
@@ -287,6 +318,7 @@ class IMSRFIDService {
   async destroy(): Promise<void> {
     this.detachNativeSubscriptions();
     this.tagListeners.clear();
+    this.observationListeners.clear();
     this.triggerListeners.clear();
     this.errorListeners.clear();
     this.sessionTags.clear();
@@ -328,6 +360,20 @@ class IMSRFIDService {
     batch.forEach(tag => {
       const rawEpc = typeof tag?.rawEpc === 'string' ? tag.rawEpc : tag?.epc;
       const epc = typeof tag?.epc === 'string' ? tag.epc.trim().toUpperCase() : '';
+      const normalizedTag: RFIDTag = {
+        epc,
+        ...(typeof rawEpc === 'string' ? { rawEpc } : {}),
+        ...(typeof tag?.rssi === 'number' ? { rssi: tag.rssi } : {}),
+      };
+
+      if (
+        epc &&
+        !/^0+$/.test(epc) &&
+        (this.activeTriggerKeys.size > 0 || this.manualScanIntent)
+      ) {
+        this.observationListeners.forEach(listener => listener(normalizedTag));
+      }
+
       if (
         !epc ||
         /^0+$/.test(epc) ||
@@ -338,11 +384,7 @@ class IMSRFIDService {
       }
 
       callbackEpcs.add(epc);
-      const uniqueTag: RFIDTag = {
-        epc,
-        ...(typeof rawEpc === 'string' ? { rawEpc } : {}),
-        ...(typeof tag.rssi === 'number' ? { rssi: tag.rssi } : {}),
-      };
+      const uniqueTag = normalizedTag;
       this.sessionTags.set(epc, uniqueTag);
       newUniqueTags.push(uniqueTag);
     });
@@ -375,7 +417,11 @@ class IMSRFIDService {
       }
     } else {
       const wasActive = this.activeTriggerKeys.delete(event.keyCode);
-      if (wasActive && this.activeTriggerKeys.size === 0) {
+      if (
+        wasActive &&
+        this.activeTriggerKeys.size === 0 &&
+        !this.manualScanIntent
+      ) {
         if (this.startIntentPending || this.state === 'STARTING') {
           this.stopRequested = true;
         } else if (this.state === 'SCANNING') {
