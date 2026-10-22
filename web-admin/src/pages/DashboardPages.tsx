@@ -201,7 +201,7 @@ export function DashboardPage() {
                         <AssetsByCategoryChart assets={visibleAssets} />
                     </div>
                     <div className="lg:col-span-3">
-                        <AssetLocationOverview key={category || "all-categories"} assets={visibleAssets} locations={locations} loading={locationsLoading} error={locationsError} />
+                        <AssetLocationOverview key={category || "all-categories"} assets={visibleAssets} locations={locations} loading={locationsLoading} error={locationsError} categoryId={category || undefined} />
                     </div>
                 </div>
             )}

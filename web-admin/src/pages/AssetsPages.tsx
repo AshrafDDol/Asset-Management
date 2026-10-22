@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { ChevronDown, Plus, RefreshCw } from "lucide-react";
 import { assignOrReplaceAssetEpcApi, type Asset } from "../api/assets.api";
@@ -47,7 +47,7 @@ import {
 import { getUsersApi, type User } from "../api/users.api";
 import type { Location } from "../api/locations.api";
 import { useAssetsPagesFunction } from "./functionPages/AssetsPagesFunction";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ConfirmDeleteDialog } from "../components/MasterDataModal";
 import { LocationTreeSelect } from "../components/LocationTreeSelect";
 import { chronological, type ListOrder } from "../utils/listOrder";
@@ -1104,6 +1104,7 @@ function AssetEpcDialog({
 
 export function AssetsPages() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     assets,
     assetCategories,
@@ -1145,20 +1146,25 @@ export function AssetsPages() {
   const [repairs, setRepairs] = useState<AssetRepair[]>([]);
   const [repairLoading, setRepairLoading] = useState(true);
   const [repairError, setRepairError] = useState("");
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState(() => ({
     assetCode: "",
     itemName: "",
-    category: "",
+    category: /^\d+$/.test(searchParams.get("categoryId") || "") ? searchParams.get("categoryId")! : "",
     height: "",
     width: "",
     gridUp: "",
     radius: "",
     gapMm: "",
-    current: "",
+    current: searchParams.get("currentLocationId") === "unassigned" || /^\d+$/.test(searchParams.get("currentLocationId") || "")
+      ? searchParams.get("currentLocationId")!
+      : "",
     epc: "",
     condition: "",
     status: "",
-  });
+  }));
+  const [locationScope, setLocationScope] = useState<"direct" | "total">(
+    searchParams.get("locationScope") === "total" ? "total" : "direct"
+  );
   const [order, setOrder] = useState<ListOrder>("LATEST");
   const activeRepairByAsset = new Map(repairs.filter(repair => repair.status === "IN_PROGRESS").map(repair => [repair.asset.id, repair]));
   const pendingRepairByAsset = new Map(repairs.flatMap(repair => repair.tasks.filter(task => task.status === "PENDING").map(task => [repair.asset.id, task] as const)));
@@ -1175,6 +1181,45 @@ export function AssetsPages() {
     return status.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   };
   const repairStatusReady = !repairLoading && !repairError;
+  const locationIds = useMemo(() => new Set(locations.map((location) => location.id)), [locations]);
+  const effectiveCurrentLocation = filters.current === "unassigned" ||
+    (/^\d+$/.test(filters.current) && locationIds.has(Number(filters.current)))
+    ? filters.current
+    : "";
+  const effectiveCategory = filters.category && assetCategories.some((category) => String(category.id) === filters.category)
+    ? filters.category
+    : "";
+  const scopedLocationIds = useMemo(() => {
+    const result = new Set<number>();
+    if (!effectiveCurrentLocation || effectiveCurrentLocation === "unassigned") return result;
+    const rootId = Number(effectiveCurrentLocation);
+    result.add(rootId);
+    if (locationScope === "direct") return result;
+    const children = new Map<number, number[]>();
+    locations.forEach((location) => {
+      if (location.parentLocationId != null) {
+        children.set(location.parentLocationId, [...(children.get(location.parentLocationId) || []), location.id]);
+      }
+    });
+    const pending = [rootId];
+    while (pending.length > 0) {
+      const current = pending.pop()!;
+      (children.get(current) || []).forEach((childId) => {
+        if (!result.has(childId)) {
+          result.add(childId);
+          pending.push(childId);
+        }
+      });
+    }
+    return result;
+  }, [effectiveCurrentLocation, locationScope, locations]);
+  const matchesLocationScope = (asset: Asset) => {
+    if (!effectiveCurrentLocation) return true;
+    if (effectiveCurrentLocation === "unassigned") {
+      return asset.locationId == null || !locationIds.has(asset.locationId);
+    }
+    return asset.locationId != null && scopedLocationIds.has(asset.locationId);
+  };
   const visible = chronological(
     (repairStatusReady ? assets : []).filter(
       (asset) =>
@@ -1186,7 +1231,7 @@ export function AssetsPages() {
           asset.itemName
             .toLowerCase()
             .includes(filters.itemName.toLowerCase())) &&
-        (!filters.category || String(asset.categoryId) === filters.category) &&
+        (!effectiveCategory || String(asset.categoryId) === effectiveCategory) &&
         (!filters.height ||
           Number(asset.measurementHeight) === Number(filters.height)) &&
         (!filters.width ||
@@ -1194,7 +1239,7 @@ export function AssetsPages() {
         (!filters.gridUp || Number(asset.gridUp) === Number(filters.gridUp)) &&
         (!filters.radius || Number(asset.radius) === Number(filters.radius)) &&
         (!filters.gapMm || Number(asset.gapMm) === Number(filters.gapMm)) &&
-        (!filters.current || String(asset.locationId) === filters.current) &&
+        matchesLocationScope(asset) &&
         (!filters.epc ||
           asset.epc?.epcCode.includes(filters.epc.toUpperCase())) &&
         (!filters.condition || asset.condition === filters.condition) &&
@@ -1260,6 +1305,22 @@ export function AssetsPages() {
   useErrorToast(repairError);
   const setFilter = (name: keyof typeof filters, value: string) =>
     setFilters((old) => ({ ...old, [name]: value }));
+  const updateDrillDownQuery = (current: string, scope: "direct" | "total", category = filters.category) => {
+    const next = new URLSearchParams(searchParams);
+    if (current) {
+      next.set("currentLocationId", current);
+      next.set("locationScope", scope);
+    } else {
+      next.delete("currentLocationId");
+      next.delete("locationScope");
+    }
+    if (category) next.set("categoryId", category); else next.delete("categoryId");
+    setSearchParams(next, { replace: true });
+  };
+  const setCurrentLocationFilter = (value: string) => {
+    setFilter("current", value);
+    updateDrillDownQuery(value, locationScope);
+  };
   const applyColumns = (next: AssetColumnId[]) => {
     setColumns(next);
     localStorage.setItem(ASSET_COLUMNS_KEY, JSON.stringify(next));
@@ -1432,7 +1493,9 @@ export function AssetsPages() {
                   condition: "",
                   status: "",
                 });
+                setLocationScope("direct");
                 setOrder("LATEST");
+                setSearchParams({}, { replace: true });
               }}
             >
               Clear Filters
@@ -1457,8 +1520,11 @@ export function AssetsPages() {
             <Field label="Category" htmlFor="filter-asset-category">
               <SelectField
                 id="filter-asset-category"
-                value={filters.category}
-                onChange={(value) => setFilter("category", value)}
+                value={effectiveCategory}
+                onChange={(value) => {
+                  setFilter("category", value);
+                  updateDrillDownQuery(filters.current, locationScope, value);
+                }}
                 options={assetCategories.map((c) => ({ value: String(c.id), label: c.name }))}
                 emptyLabel="All"
                 placeholder="All"
@@ -1533,14 +1599,36 @@ export function AssetsPages() {
               />
             </Field>
             <Field label="Current Location">
-              <LocationTreeSelect
-                locations={locations}
-                selectedLocationId={filters.current}
-                onChange={(id) => setFilter("current", String(id))}
-                allowClear
-                clearLabel="All Locations"
-                onClear={() => setFilter("current", "")}
-                placeholder="All Locations"
+              {effectiveCurrentLocation === "unassigned" ? (
+                <div className="flex h-10 items-center justify-between rounded-md border bg-background px-3 text-sm">
+                  <span>Unassigned</span>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setCurrentLocationFilter("")}>Clear</Button>
+                </div>
+              ) : (
+                <LocationTreeSelect
+                  locations={locations}
+                  selectedLocationId={effectiveCurrentLocation}
+                  onChange={(id) => setCurrentLocationFilter(String(id))}
+                  allowClear
+                  clearLabel="All Locations"
+                  onClear={() => setCurrentLocationFilter("")}
+                  placeholder="All Locations"
+                />
+              )}
+            </Field>
+            <Field label="Location Scope" htmlFor="filter-location-scope">
+              <SelectField
+                id="filter-location-scope"
+                value={locationScope}
+                onChange={(value) => {
+                  const scope = value === "total" ? "total" : "direct";
+                  setLocationScope(scope);
+                  updateDrillDownQuery(filters.current, scope);
+                }}
+                options={[
+                  { value: "direct", label: "Direct Only" },
+                  { value: "total", label: "Include Descendants" },
+                ]}
               />
             </Field>
             <Field label="Condition" htmlFor="filter-asset-condition">

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import type { Asset } from "@/api/assets.api";
 import type { Location } from "@/api/locations.api";
 import { SelectField } from "@/components/common/SelectField";
@@ -21,7 +22,8 @@ type LocationRow = {
 
 const LOCATION_TYPES = ["STORAGE", "OPERATION", "REPAIR"];
 
-export function AssetLocationOverview({ assets, locations, loading, error }: { assets: Asset[]; locations: Location[]; loading: boolean; error: string }) {
+export function AssetLocationOverview({ assets, locations, loading, error, categoryId }: { assets: Asset[]; locations: Location[]; loading: boolean; error: string; categoryId?: string }) {
+  const navigate = useNavigate();
   const [locationType, setLocationType] = useState("");
   const [countMode, setCountMode] = useState<CountMode>("TOTAL");
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
@@ -120,6 +122,22 @@ export function AssetLocationOverview({ assets, locations, loading, error }: { a
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
+  const drillDown = (locationId: number | "unassigned", scope: "direct" | "total") => {
+    const params = new URLSearchParams({ currentLocationId: String(locationId), locationScope: scope });
+    if (categoryId) params.set("categoryId", categoryId);
+    navigate(`/assets?${params.toString()}`);
+  };
+  const countButton = (count: number, label: "Direct" | "Total", locationId: number | "unassigned", scope: "direct" | "total", locationLabel: string) => (
+    <button
+      type="button"
+      onClick={() => drillDown(locationId, scope)}
+      className="rounded-md border border-transparent px-2 py-1 text-right text-sm tabular-nums transition-colors hover:border-border hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label={`View ${label.toLowerCase()} assets for ${locationLabel}`}
+    >
+      <span className="block font-medium text-primary hover:underline">{count}</span>
+      <span className="block text-[10px] text-muted-foreground">{label}</span>
+    </button>
+  );
 
   return (
     <Card>
@@ -158,12 +176,12 @@ export function AssetLocationOverview({ assets, locations, loading, error }: { a
                     </div>
                   </div>
                   <div className="h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${value === 0 ? 0 : Math.max(2, (value / maxCount) * 100)}%` }} /></div>
-                  <div className="text-right text-sm tabular-nums"><span className="font-medium">{row.direct}</span><span className="block text-[10px] text-muted-foreground">Direct</span></div>
-                  <div className="text-right text-sm tabular-nums"><span className="font-medium">{row.total}</span><span className="block text-[10px] text-muted-foreground">Total</span></div>
+                  {countButton(row.direct, "Direct", row.location.id, "direct", path)}
+                  {countButton(row.total, "Total", row.location.id, "total", path)}
                 </div>
               );
             })}
-            {overview.unassigned > 0 && overview.currentPage === 1 && <div className="grid min-w-[640px] grid-cols-[minmax(260px,1fr)_minmax(180px,2fr)_80px_80px] items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/50"><div className="pl-8"><div className="text-sm font-medium">Unassigned</div><div className="text-xs text-muted-foreground">Not included in the location pagination count</div></div><div className="h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(2, (overview.unassigned / maxCount) * 100)}%` }} /></div><div className="text-right text-sm font-medium tabular-nums">{overview.unassigned}</div><div className="text-right text-sm font-medium tabular-nums">{overview.unassigned}</div></div>}
+            {overview.unassigned > 0 && overview.currentPage === 1 && <div className="grid min-w-[640px] grid-cols-[minmax(260px,1fr)_minmax(180px,2fr)_80px_80px] items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/50"><div className="pl-8"><div className="text-sm font-medium">Unassigned</div><div className="text-xs text-muted-foreground">Not included in the location pagination count</div></div><div className="h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(2, (overview.unassigned / maxCount) * 100)}%` }} /></div>{countButton(overview.unassigned, "Direct", "unassigned", "direct", "Unassigned")}{countButton(overview.unassigned, "Total", "unassigned", "total", "Unassigned")}</div>}
           </div>
         )}
         </div>
