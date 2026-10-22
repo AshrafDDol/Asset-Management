@@ -17,6 +17,7 @@ const USER_SELECT = {
     select: {
       id: true,
       name: true,
+      isActive: true,
     },
   },
   department: {

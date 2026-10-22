@@ -173,7 +173,13 @@ function PrepareIssueDialog({
       .then(([loadedUsers, loadedBatches]) => {
         setUsers(loadedUsers);
         setBatches(loadedBatches);
-        const initialRecipient = loadedUsers.find((user) => user.isActive !== false);
+        const initialRecipient =
+          loadedUsers.find(
+            (user) =>
+              user.isActive !== false &&
+              user.role?.isActive !== false &&
+              user.role?.name.trim().toLowerCase() === "admin"
+          ) || loadedUsers.find((user) => user.isActive !== false);
         if (initialRecipient) {
           const initialRecipientId = String(initialRecipient.id);
           setRecipient(initialRecipientId);
@@ -1137,6 +1143,7 @@ export function AssetsPages() {
   const [preparing, setPreparing] = useState(false);
   const [repairAsset, setRepairAsset] = useState<Asset | null>(null);
   const [repairs, setRepairs] = useState<AssetRepair[]>([]);
+  const [repairLoading, setRepairLoading] = useState(true);
   const [repairError, setRepairError] = useState("");
   const [filters, setFilters] = useState({
     assetCode: "",
@@ -1153,8 +1160,23 @@ export function AssetsPages() {
     status: "",
   });
   const [order, setOrder] = useState<ListOrder>("LATEST");
+  const activeRepairByAsset = new Map(repairs.filter(repair => repair.status === "IN_PROGRESS").map(repair => [repair.asset.id, repair]));
+  const pendingRepairByAsset = new Map(repairs.flatMap(repair => repair.tasks.filter(task => task.status === "PENDING").map(task => [repair.asset.id, task] as const)));
+  const assetStatusKey = (asset: Asset) => {
+    const pendingRepair = pendingRepairByAsset.get(asset.id);
+    if (asset.status === "AVAILABLE" && pendingRepair?.action === "START_REPAIR") return "PREPARED_FOR_REPAIR";
+    if (asset.status === "UNDER_REPAIR" && pendingRepair?.action === "COMPLETE_REPAIR") return "PREPARED_COMPLETE_REPAIR";
+    return asset.status || "";
+  };
+  const assetStatusLabel = (asset: Asset) => {
+    const status = assetStatusKey(asset);
+    if (status === "PREPARED_FOR_REPAIR") return "Prepared for Repair";
+    if (status === "PREPARED_COMPLETE_REPAIR") return "Prepared Complete Repair";
+    return status.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  };
+  const repairStatusReady = !repairLoading && !repairError;
   const visible = chronological(
-    assets.filter(
+    (repairStatusReady ? assets : []).filter(
       (asset) =>
         (!filters.assetCode ||
           asset.assetCode
@@ -1176,23 +1198,13 @@ export function AssetsPages() {
         (!filters.epc ||
           asset.epc?.epcCode.includes(filters.epc.toUpperCase())) &&
         (!filters.condition || asset.condition === filters.condition) &&
-        (!filters.status || asset.status === filters.status)
+        (!filters.status || assetStatusKey(asset) === filters.status)
     ),
     (asset) => asset.createdAt,
     order
   );
   const selectedAssets = assets.filter((asset) => selected.has(asset.id));
   const editingAsset = assets.find((asset) => asset.id === editingAssetId);
-  const activeRepairByAsset = new Map(repairs.filter(repair => repair.status === "IN_PROGRESS").map(repair => [repair.asset.id, repair]));
-  const pendingRepairByAsset = new Map(repairs.flatMap(repair => repair.tasks.filter(task => task.status === "PENDING").map(task => [repair.asset.id, task] as const)));
-  const assetStatusLabel = (asset: Asset) => {
-    const pendingRepair = pendingRepairByAsset.get(asset.id);
-    if (asset.status === "AVAILABLE" && pendingRepair?.action === "START_REPAIR") return "Prepared for Repair";
-    if (asset.status === "UNDER_REPAIR" && pendingRepair?.action === "COMPLETE_REPAIR") return "Prepared Complete Repair";
-    return asset.status
-      ? asset.status.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
-      : "";
-  };
   const selectionEligibility = (asset: Asset) => {
     if (asset.status === "AVAILABLE") {
       const reason = eligibility(asset);
@@ -1228,7 +1240,17 @@ export function AssetsPages() {
     : unsupportedRepairBatch
       ? "Select exactly one Asset to prepare Repair completion."
       : undefined;
-  const loadRepairs = async () => { try { setRepairError(""); setRepairs(await getRepairsApi()); } catch (caught) { setRepairError(apiError(caught)); } };
+  const loadRepairs = async () => {
+    try {
+      setRepairLoading(true);
+      setRepairError("");
+      setRepairs(await getRepairsApi());
+    } catch (caught) {
+      setRepairError(apiError(caught));
+    } finally {
+      setRepairLoading(false);
+    }
+  };
   useEffect(() => {
     // Asset master data uses mount-time loading.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -1536,10 +1558,15 @@ export function AssetsPages() {
                 id="filter-asset-status"
                 value={filters.status}
                 onChange={(value) => setFilter("status", value)}
-                options={["AVAILABLE", "RESERVED", "PENDING_CONFIRMATION", "IN_USE"].map((v) => ({
-                  value: v,
-                  label: v.replaceAll("_", " "),
-                }))}
+                options={[
+                  { value: "AVAILABLE", label: "AVAILABLE" },
+                  { value: "RESERVED", label: "RESERVED" },
+                  { value: "PENDING_CONFIRMATION", label: "PENDING CONFIRMATION" },
+                  { value: "IN_USE", label: "IN USE" },
+                  { value: "PREPARED_FOR_REPAIR", label: "Prepared for Repair" },
+                  { value: "UNDER_REPAIR", label: "Under Repair" },
+                  { value: "PREPARED_COMPLETE_REPAIR", label: "Prepared Complete Repair" },
+                ]}
                 emptyLabel="All"
                 placeholder="All"
               />
@@ -2041,9 +2068,9 @@ export function AssetsPages() {
           </div>,
           ...columns.map((column) => assetColumnLabel.get(column) ?? column),
         ]}
-        loading={loading}
+        loading={loading || repairLoading}
         isEmpty={visible.length === 0}
-        emptyMessage="No assets found."
+        emptyMessage={repairError ? "Assets are unavailable until Repair status can be loaded." : "No assets found."}
         itemLabel="asset"
       >
         {visible.map((asset) => (
