@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/pagination";
 import { SelectField } from "@/components/common/SelectField";
 
-export const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 /**
  * Page numbers to render, with `null` marking an ellipsis gap.
@@ -41,6 +41,7 @@ type TablePaginationProps = {
   onPageSizeChange: (pageSize: number) => void;
   /** Noun for the row count, e.g. "asset". */
   itemLabel?: string;
+  pageSizeOptions?: number[];
 };
 
 export function TablePagination({
@@ -50,6 +51,7 @@ export function TablePagination({
   onPageChange,
   onPageSizeChange,
   itemLabel = "row",
+  pageSizeOptions = PAGE_SIZE_OPTIONS,
 }: TablePaginationProps) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const first = total === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -76,7 +78,7 @@ export function TablePagination({
         <SelectField
           value={String(pageSize)}
           onChange={(value) => onPageSizeChange(Number(value))}
-          options={PAGE_SIZE_OPTIONS.map((size) => ({ value: String(size), label: `${size} / page` }))}
+          options={pageSizeOptions.map((size) => ({ value: String(size), label: `${size} / page` }))}
           className="h-8 w-28"
         />
       </div>

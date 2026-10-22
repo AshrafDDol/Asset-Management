@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { getAssetsApi, type Asset } from "../api/assets.api";
 import { getAssetMovementsApi, type AssetMovement } from "../api/assetMovements.api";
+import { getLocationsApi, type Location } from "../api/locations.api";
 import { useAuthStore } from "../stores/authStores";
 import { errorMessage } from "../utils/errorMessage";
 import { AssetsByCategoryChart } from "@/components/dashboard/AssetsByCategoryChart";
@@ -10,6 +11,7 @@ import { EpcCoverageChart } from "@/components/dashboard/EpcCoverageChart";
 import { AssetsByStatusChart } from "@/components/dashboard/AssetsByStatusChart";
 import { MovementsByTypeChart } from "@/components/dashboard/MovementsByTypeChart";
 import { MovementsTrendChart } from "@/components/dashboard/MovementsTrendChart";
+import { AssetLocationOverview } from "@/components/dashboard/AssetLocationOverview";
 import { ErrorBox } from "@/components/common/ErrorBox";
 import { PageHeader } from "@/components/common/PageHeader";
 import { SelectField } from "@/components/common/SelectField";
@@ -52,8 +54,11 @@ export function DashboardPage() {
     const user = useAuthStore((state) => state.user);
     const [assets, setAssets] = useState<Asset[]>([]);
     const [movements, setMovements] = useState<AssetMovement[]>([]);
+    const [locations, setLocations] = useState<Location[]>([]);
     const [loading, setLoading] = useState(true);
+    const [locationsLoading, setLocationsLoading] = useState(true);
     const [error, setError] = useState("");
+    const [locationsError, setLocationsError] = useState("");
     const [range, setRange] = useState("30");
     const [category, setCategory] = useState("");
 
@@ -67,6 +72,14 @@ export function DashboardPage() {
             })
             .catch((caught) => setError(errorMessage(caught, "Failed to load dashboard data.")))
             .finally(() => setLoading(false));
+    }, []);
+
+    useEffect(() => {
+        // Location availability is isolated so it cannot suppress existing Dashboard content.
+        void getLocationsApi()
+            .then((loadedLocations) => setLocations(Array.isArray(loadedLocations) ? loadedLocations : []))
+            .catch((caught) => setLocationsError(errorMessage(caught, "Failed to load Asset Location Overview.")))
+            .finally(() => setLocationsLoading(false));
     }, []);
 
     // Category scopes everything; the range scopes the activity charts, which are
@@ -186,6 +199,9 @@ export function DashboardPage() {
                     <MovementsByTypeChart movements={visibleMovements} days={Number(range)} />
                     <div className="lg:col-span-3">
                         <AssetsByCategoryChart assets={visibleAssets} />
+                    </div>
+                    <div className="lg:col-span-3">
+                        <AssetLocationOverview key={category || "all-categories"} assets={visibleAssets} locations={locations} loading={locationsLoading} error={locationsError} />
                     </div>
                 </div>
             )}
