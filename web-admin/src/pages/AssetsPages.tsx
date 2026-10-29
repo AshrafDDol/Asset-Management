@@ -1647,10 +1647,10 @@ export function AssetsPages() {
                 value={filters.status}
                 onChange={(value) => setFilter("status", value)}
                 options={[
-                  { value: "AVAILABLE", label: "AVAILABLE" },
-                  { value: "RESERVED", label: "RESERVED" },
-                  { value: "PENDING_CONFIRMATION", label: "PENDING CONFIRMATION" },
-                  { value: "IN_USE", label: "IN USE" },
+                  { value: "AVAILABLE", label: "Available" },
+                  { value: "RESERVED", label: "Reserved" },
+                  { value: "PENDING_CONFIRMATION", label: "Pending Confirmation" },
+                  { value: "IN_USE", label: "In Use" },
                   { value: "PREPARED_FOR_REPAIR", label: "Prepared for Repair" },
                   { value: "UNDER_REPAIR", label: "Under Repair" },
                   { value: "PREPARED_COMPLETE_REPAIR", label: "Prepared Complete Repair" },

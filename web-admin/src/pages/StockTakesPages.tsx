@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Plus, X } from 'lucide-react';
+import { Plus, RefreshCw, X } from 'lucide-react';
 import { getAssetsApi, type Asset } from '../api/assets.api';
 import { getLocationsApi, type Location } from '../api/locations.api';
 import { cancelStockTakeApi, completeStockTakeApi, createStockTakeApi, getStockTakesApi, type StockTake } from '../api/stockTakes.api';
@@ -21,6 +21,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 const message = (error: unknown) => (error as { response?: { data?: { message?: string } }; message?: string }).response?.data?.message || (error as { message?: string }).message || 'Stock Take request failed.';
 const today = () => new Date().toISOString().slice(0, 10);
 const label = (value: string) => value.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+const DETAIL_FILTERS = ['expected', 'found', 'missing', 'unexpected'] as const;
+type DetailFilter = typeof DETAIL_FILTERS[number];
 
 /** Status drives the badge tone in both the list and the detail panel. */
 function StatusBadge({ status }: { status: string }) {
@@ -36,16 +38,30 @@ export function StockTakesPages() {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ stockTakeDate: today(), pic: '', locationId: '' });
   const [preview, setPreview] = useState<Asset[]>([]);
+  const [detailFilter, setDetailFilter] = useState<DetailFilter>('expected');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const chosenLocation = useMemo(() => locations.find(item => String(item.id) === form.locationId), [form.locationId, locations]);
+  const visibleExpectedItems = useMemo(() => {
+    if (!selected || detailFilter === 'unexpected') return [];
+    const found = selected.items.filter(item => item.result === 'FOUND');
+    const missing = selected.items.filter(item => item.result === 'MISSING');
+    if (detailFilter === 'found') return found;
+    if (detailFilter === 'missing') return missing;
+    return [...found, ...missing];
+  }, [detailFilter, selected]);
 
   useErrorToast(error);
 
   async function load() {
     setLoading(true); setError('');
-    try { const [stockTakes, places] = await Promise.all([getStockTakesApi(), getLocationsApi()]); setSessions(stockTakes); setLocations(places.filter(place => place.isActive !== false)); }
+    try {
+      const [stockTakes, places] = await Promise.all([getStockTakesApi(), getLocationsApi()]);
+      setSessions(stockTakes);
+      setLocations(places.filter(place => place.isActive !== false));
+      setSelected(current => current ? stockTakes.find(session => session.id === current.id) || current : null);
+    }
     catch (reason) { setError(message(reason)); } finally { setLoading(false); }
   }
   useEffect(() => {
@@ -53,6 +69,10 @@ export function StockTakesPages() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, []);
+  function openDetails(session: StockTake) {
+    if (selected?.id !== session.id) setDetailFilter('expected');
+    setSelected(session);
+  }
   async function preparePreview() {
     if (!form.locationId) return;
     setSaving(true); setError('');
@@ -61,7 +81,7 @@ export function StockTakesPages() {
   }
   async function save() {
     setSaving(true); setError('');
-    try { const created = await createStockTakeApi({ ...form, locationId: Number(form.locationId) }); setSessions(items => [created, ...items]); setSelected(created); setWizard(false); toast.success(`Stock Take ${created.stockTakeNo} created.`); }
+    try { const created = await createStockTakeApi({ ...form, locationId: Number(form.locationId) }); setSessions(items => [created, ...items]); openDetails(created); setWizard(false); toast.success(`Stock Take ${created.stockTakeNo} created.`); }
     catch (reason) { setError(message(reason)); } finally { setSaving(false); }
   }
   async function transition(action: 'complete' | 'cancel') {
@@ -83,10 +103,16 @@ export function StockTakesPages() {
         title="Stock Takes"
         description="Location-based audit snapshots. Stock Take never reserves or mutates Assets."
         actions={
-          <Button onClick={() => { setWizard(true); setStep(1); setPreview([]); setForm({ stockTakeDate: today(), pic: '', locationId: '' }); }}>
-            <Plus />
-            Add New Stock Take
-          </Button>
+          <>
+            <Button onClick={() => { setWizard(true); setStep(1); setPreview([]); setForm({ stockTakeDate: today(), pic: '', locationId: '' }); }}>
+              <Plus />
+              Add New Stock Take
+            </Button>
+            <Button variant="outline" onClick={() => void load()} disabled={loading}>
+              <RefreshCw />
+              Refresh
+            </Button>
+          </>
         }
       />
 
@@ -211,11 +237,18 @@ export function StockTakesPages() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {Object.entries(selected.summary).map(([key, value]) => (
-                <div key={key} className="rounded-lg border p-3">
-                  <div className="text-2xl font-semibold tabular-nums">{value}</div>
+              {DETAIL_FILTERS.map(key => (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={detailFilter === key}
+                  aria-controls="stock-take-results"
+                  onClick={() => setDetailFilter(key)}
+                  className={`rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${detailFilter === key ? 'border-primary bg-accent ring-1 ring-primary' : 'hover:bg-muted/50'}`}
+                >
+                  <div className="text-2xl font-semibold tabular-nums">{selected.summary[key]}</div>
                   <div className="text-xs text-muted-foreground">{label(key)}</div>
-                </div>
+                </button>
               ))}
             </div>
 
@@ -226,7 +259,7 @@ export function StockTakesPages() {
               </div>
             )}
 
-            <div className="max-h-96 overflow-auto rounded-md border">
+            <div id="stock-take-results" className="max-h-96 overflow-auto rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -237,7 +270,7 @@ export function StockTakesPages() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {selected.items.map(item => (
+                  {detailFilter !== 'unexpected' && visibleExpectedItems.map(item => (
                     <TableRow key={item.id}>
                       <TableCell className="font-mono text-xs">{item.expectedAssetCode}</TableCell>
                       <TableCell>
@@ -248,7 +281,7 @@ export function StockTakesPages() {
                       <TableCell>{label(item.result)}</TableCell>
                     </TableRow>
                   ))}
-                  {selected.unexpected.map(scan => (
+                  {detailFilter === 'unexpected' && selected.unexpected.map(scan => (
                     <TableRow key={`u-${scan.id}`}>
                       <TableCell>—</TableCell>
                       <TableCell className="text-muted-foreground">Unexpected scan</TableCell>
@@ -258,6 +291,14 @@ export function StockTakesPages() {
                       </TableCell>
                     </TableRow>
                   ))}
+                  {((detailFilter === 'unexpected' && selected.unexpected.length === 0) ||
+                    (detailFilter !== 'unexpected' && visibleExpectedItems.length === 0)) && (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={4} className="h-20 text-center text-muted-foreground">
+                        {detailFilter === 'expected' ? 'No expected assets' : detailFilter === 'found' ? 'No found assets' : detailFilter === 'missing' ? 'No missing assets' : 'No unexpected scans'}
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -284,7 +325,7 @@ export function StockTakesPages() {
             <TableCell className="tabular-nums">{session.summary.missing}</TableCell>
             <TableCell className="tabular-nums">{session.summary.unexpected}</TableCell>
             <TableCell>
-              <Button variant="ghost" size="sm" onClick={() => setSelected(session)}>Details</Button>
+              <Button variant="ghost" size="sm" onClick={() => openDetails(session)}>Details</Button>
             </TableCell>
           </TableRow>
         ))}

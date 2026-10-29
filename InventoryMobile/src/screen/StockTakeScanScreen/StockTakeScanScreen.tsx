@@ -10,7 +10,9 @@ import StockTakeSyncService, { StockTakeSyncSnapshot } from '../../services/stoc
 
 type Props = NativeStackScreenProps<ScreenStackParamList, 'StockTakeScanScreen'>;
 type MagnifiedValue = { label: string; value: string };
-type DisplayRow = { kind: 'expected'; item: StockTakeItem } | { kind: 'unexpected'; epc: string };
+type ExpectedDisplayRow = { kind: 'expected'; item: StockTakeItem };
+type UnexpectedDisplayRow = { kind: 'unexpected'; epc: string };
+type DisplayRow = ExpectedDisplayRow | UnexpectedDisplayRow;
 const normalize = (value: string) => value.trim().toUpperCase();
 
 const StockTakeRow = memo(({ row, found, confirmed, onMagnify }: { row: DisplayRow; found: boolean; confirmed: boolean; onMagnify: (label: string, value: string) => void }) => {
@@ -142,11 +144,17 @@ const StockTakeScanScreen: React.FC<Props> = ({ route, navigation }) => {
     finally { setSubmitting(false); }
   } }]);
   const onMagnify = useCallback((label: string, value: string) => setMagnifiedValue({ label, value }), []);
+  const expectedRows = useMemo<ExpectedDisplayRow[]>(() => session?.items.map(item => ({ kind: 'expected', item })) || [], [session]);
+  const orderedExpectedRows = useMemo<ExpectedDisplayRow[]>(() => {
+    const missing: ExpectedDisplayRow[] = [];
+    const found: ExpectedDisplayRow[] = [];
+    expectedRows.forEach(row => (locallyFoundIds.has(row.item.id) ? found : missing).push(row));
+    return [...missing, ...found];
+  }, [expectedRows, locallyFoundIds]);
+  const unexpectedRows = useMemo<UnexpectedDisplayRow[]>(() => unexpectedEpcs.map(epc => ({ kind: 'unexpected', epc })), [unexpectedEpcs]);
   const rows = useMemo<DisplayRow[]>(() => {
-    if (!session) return [];
-    const expected: DisplayRow[] = session.items.map(item => ({ kind: 'expected', item }));
-    return showUnexpected ? [...expected, ...unexpectedEpcs.map(epc => ({ kind: 'unexpected' as const, epc }))] : expected;
-  }, [session, showUnexpected, unexpectedEpcs]);
+    return showUnexpected ? [...orderedExpectedRows, ...unexpectedRows] : orderedExpectedRows;
+  }, [orderedExpectedRows, showUnexpected, unexpectedRows]);
   const renderRow = useCallback(({ item }: { item: DisplayRow }) => item.kind === 'unexpected'
     ? <StockTakeRow row={item} found={false} confirmed={false} onMagnify={onMagnify} />
     : <StockTakeRow row={item} found={locallyFoundIds.has(item.item.id)} confirmed={confirmedFoundIds.has(item.item.id)} onMagnify={onMagnify} />,
